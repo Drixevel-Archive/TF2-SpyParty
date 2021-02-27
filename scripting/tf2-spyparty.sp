@@ -338,7 +338,10 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 				count++;
 		
 		if (count <= 0)
+		{
+			PrintToChatAll("Red has eliminated all spies on the Blue team, Red wins the round.");
 			TF2_ForceWin(TFTeam_Red);
+		}
 	}
 	else
 	{
@@ -746,6 +749,12 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	if (TF2_GetClientTeam(client) == TFTeam_Red)
 	{
 		g_TotalShots++;
+
+		if (g_TotalShots >= g_MaxShots)
+		{
+			PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
+			TF2_ForceWin(TFTeam_Blue);
+		}
 		
 		for (int i = 1; i <= MaxClients; i++)
 			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
