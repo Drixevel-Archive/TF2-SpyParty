@@ -17,6 +17,7 @@
 /*****************************/
 //Includes
 #include <sourcemod>
+#include <sdkhooks>
 #include <tf2_stocks>
 #include <tf2items>
 #include <tf2attributes>
@@ -34,6 +35,8 @@ int g_Countdown;
 Handle g_CountdownTimer;
 
 bool g_IsSpy[MAXPLAYERS + 1];
+
+int g_LastRefilled[MAXPLAYERS + 1];
 
 /*****************************/
 //Plugin Info
@@ -62,6 +65,11 @@ public void OnPluginStart()
 		if (IsPlayerAlive(i))
 			CreateTimer(0.1, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
 	}
+
+	int entity = -1; char classname[64];
+	while ((entity = FindEntityByClassname(entity, "*")) != -1)
+		if (GetEntityClassname(entity, classname, sizeof(classname)))
+			OnEntityCreated(entity, classname);
 }
 
 public void OnPluginEnd()
@@ -338,4 +346,64 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDe
 	}
 
 	return Plugin_Continue;
+}
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (StrEqual(classname, "trigger_multiple", false))
+	{
+		SDKHook(entity, SDKHook_StartTouch, OnTouchTriggerStart);
+		SDKHook(entity, SDKHook_Touch, OnTouchTrigger);
+		SDKHook(entity, SDKHook_EndTouch, OnTouchTriggerEnd);
+	}
+}
+
+public Action OnTouchTriggerStart(int entity, int other)
+{
+	if (other < 1 || other > MaxClients)
+		return;
+	
+	char sName[64];
+	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+	int time = GetTime();
+
+	if (StrEqual(sName, "refill_mag", false) && g_LastRefilled[other] < time)
+	{
+		g_LastRefilled[other] = time + 60;
+
+		int weapon;
+		for (int slot = 0; slot < 3; slot++)
+			if ((weapon = GetPlayerWeaponSlot(other, slot)) != -1)
+				SetWeaponAmmo(other, weapon, 1);
+	}
+}
+
+public Action OnTouchTrigger(int entity, int other)
+{
+	if (other < 1 || other > MaxClients)
+		return;
+	
+	char sName[64];
+	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+	if (StrEqual(sName, "", false))
+	{
+		
+	}
+}
+
+public Action OnTouchTriggerEnd(int entity, int other)
+{
+
+	if (other < 1 || other > MaxClients)
+		return;
+	
+	char sName[64];
+	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+	if (StrEqual(sName, "", false))
+	{
+		
+	}
 }
