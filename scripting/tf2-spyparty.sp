@@ -74,6 +74,9 @@ int g_GlowEnt[MAXPLAYERS + 1] = {-1, ...};
 
 int g_SpyTask;
 
+int g_iLaserMaterial;
+int g_iHaloMaterial;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -130,6 +133,8 @@ public void OnPluginStart()
 			OnEntityCreated(entity, classname);
 	
 	ParseTasks();
+
+	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
 public void OnClientPutInServer(int client)
@@ -302,6 +307,9 @@ public void OnPluginEnd()
 		if (IsPlayerAlive(i) && g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
 			AcceptEntityInput(g_GlowEnt[i], "Kill");
 	}
+
+	PauseTF2Timer();
+	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
 public void OnMapStart()
@@ -309,6 +317,11 @@ public void OnMapStart()
 	PrecacheSound("coach/coach_go_here.wav");
 	PrecacheSound("coach/coach_defend_here.wav");
 	PrecacheSound("coach/coach_look_here.wav");
+
+	g_iLaserMaterial = PrecacheModel("materials/sprites/laserbeam.vmt");
+	g_iHaloMaterial = PrecacheModel("materials/sprites/halo01.vmt");
+
+	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
 public void OnMapEnd()
@@ -316,6 +329,8 @@ public void OnMapEnd()
 	g_MatchState = STATE_HIBERNATION;
 	g_CountdownTimer = null;
 	g_GiveTasksTimer = null;
+
+	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -518,6 +533,109 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 			SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
 		}
 	}
+
+	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) == TFTeam_Blue)
+	{
+		int task = g_NearTask[client];
+
+		if (task == -1)
+			return;
+		
+		int entity = FindEntityByName(g_Tasks[task].trigger, "trigger_multiple");
+
+		if (!IsValidEntity(entity))
+			return;
+		
+		float vecDestStart[3]; float vecDestEnd[3];
+		GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
+		Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 5.0, 5.0, 1, 5.0, {210, 0, 0, 120}, 0);
+	}
+}
+
+int FindEntityByName(const char[] name, const char[] classname = "*")
+{
+	int entity = -1; char temp[256];
+	while ((entity = FindEntityByClassname(entity, classname)) != -1)
+	{
+		GetEntPropString(entity, Prop_Data, "m_iName", temp, sizeof(temp));
+		
+		if (StrEqual(temp, name, false))
+			return entity;
+	}
+	
+	return entity;
+}
+
+void GetAbsBoundingBox(int ent, float mins[3], float maxs[3], bool half = false)
+{
+    float origin[3];
+
+    GetEntPropVector(ent, Prop_Data, "m_vecAbsOrigin", origin);
+    GetEntPropVector(ent, Prop_Data, "m_vecMins", mins);
+    GetEntPropVector(ent, Prop_Data, "m_vecMaxs", maxs);
+
+    mins[0] += origin[0];
+    mins[1] += origin[1];
+    mins[2] += origin[2];
+    maxs[0] += origin[0];
+    maxs[1] += origin[1];
+
+    if (!half)
+        maxs[2] += origin[2];
+    else
+        maxs[2] = mins[2];
+}
+
+void Effect_DrawBeamBoxToClient(int client, const float bottomCorner[3], const float upperCorner[3], int modelIndex, int haloIndex, int startFrame = 0, int frameRate = 30, float life = 5.0, float width = 5.0, float endWidth = 5.0, int fadeLength = 2, float amplitude = 1.0, const color[4] =  { 255, 0, 0, 255 }, int speed = 0)
+{
+	int clients[1]; clients[0] = client;
+	Effect_DrawBeamBox(clients, 1, bottomCorner, upperCorner, modelIndex, haloIndex, startFrame, frameRate, life, width, endWidth, fadeLength, amplitude, color, speed);
+}
+
+void Effect_DrawBeamBox(int[] clients, int numClients, const float bottomCorner[3], const float upperCorner[3], int modelIndex, int haloIndex, int startFrame = 0, int frameRate = 30, float life = 5.0, float width = 5.0, float endWidth = 5.0, int fadeLength = 2, float amplitude = 1.0, const color[4] =  { 255, 0, 0, 255 }, int speed = 0)
+{
+	float corners[8][3];
+
+	for (int i = 0; i < 4; i++)
+	{
+		CopyArrayToArray(bottomCorner, corners[i], 3);
+		CopyArrayToArray(upperCorner, corners[i + 4], 3);
+	}
+
+	corners[1][0] = upperCorner[0];
+	corners[2][0] = upperCorner[0];
+	corners[2][1] = upperCorner[1];
+	corners[3][1] = upperCorner[1];
+	corners[4][0] = bottomCorner[0];
+	corners[4][1] = bottomCorner[1];
+	corners[5][1] = bottomCorner[1];
+	corners[7][0] = bottomCorner[0];
+
+	for (int i = 0; i < 4; i++)
+	{
+		int j = (i == 3 ? 0 : i + 1);
+		TE_SetupBeamPoints(corners[i], corners[j], modelIndex, haloIndex, startFrame, frameRate, life, width, endWidth, fadeLength, amplitude, color, speed);
+		TE_Send(clients, numClients);
+	}
+
+	for (int i = 4; i < 8; i++)
+	{
+		int j = (i == 7 ? 4 : i + 1);
+		TE_SetupBeamPoints(corners[i], corners[j], modelIndex, haloIndex, startFrame, frameRate, life, width, endWidth, fadeLength, amplitude, color, speed);
+		TE_Send(clients, numClients);
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		TE_SetupBeamPoints(corners[i], corners[i + 4], modelIndex, haloIndex, startFrame, frameRate, life, width, endWidth, fadeLength, amplitude, color, speed);
+		TE_Send(clients, numClients);
+	}
+}
+
+void CopyArrayToArray(const any[] array, any[] newArray, int size)
+{
+	for (int i = 0; i < size; i++)
+		newArray[i] = array[i];
 }
 
 public Action Command_Start(int client, int args)
@@ -615,6 +733,7 @@ public Action Timer_CountdownTick(Handle timer)
 		}
 	}
 
+	FindConVar("mp_respawnwavetime").IntValue = 99999;
 	CreateTF2Timer(900);
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
@@ -949,6 +1068,8 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 	g_GiveTasks = 0;
 	StopTimer(g_GiveTasksTimer);
+
+	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
 int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255, 255})
@@ -1001,4 +1122,24 @@ void CreateTF2Timer(int timer)
 
 	SetVariantInt(1);
 	AcceptEntityInput(entity, "ShowInHUD");
+}
+
+void PauseTF2Timer()
+{
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		entity = CreateEntityByName("team_round_timer");
+	
+	AcceptEntityInput(entity, "Pause");
+}
+
+stock void UnpauseTF2Timer()
+{
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		entity = CreateEntityByName("team_round_timer");
+	
+	AcceptEntityInput(entity, "Resume");
 }
