@@ -174,6 +174,13 @@ bool CompleteTask(int client, int task)
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
+	if (g_TotalShots >= g_MaxShots)
+	{
+		PrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
+		TF2_ForceWin(TFTeam_Blue);
+		return true;
+	}
+
 	return true;
 }
 
@@ -754,6 +761,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 		{
 			PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
 			TF2_ForceWin(TFTeam_Blue);
+			return MRES_Ignored;
 		}
 		
 		for (int i = 1; i <= MaxClients; i++)
