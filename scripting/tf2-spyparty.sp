@@ -485,6 +485,8 @@ public Action Timer_CountdownTick(Handle timer)
 		if (!IsClientInGame(i))
 			continue;
 		
+		g_LastRefilled[i] = 0;
+		
 		if (IsPlayerAlive(i))
 		{
 			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime());
@@ -528,6 +530,16 @@ public Action Timer_CountdownTick(Handle timer)
 	}
 
 	return Plugin_Stop;
+}
+
+int GetWeaponAmmo(int client, int weapon)
+{
+	int iAmmoType = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
+	
+	if (iAmmoType != -1)
+		return GetEntProp(client, Prop_Data, "m_iAmmo", _, iAmmoType);
+	
+	return 0;
 }
 
 void SetWeaponAmmo(int client, int weapon, int ammo)
@@ -601,6 +613,15 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	if (StrEqual(sName, "refill_mag", false))
 	{
+		int weapon = GetEntPropEnt(other, Prop_Send, "m_hActiveWeapon");
+
+		if (GetWeaponAmmo(other, weapon) > 0)
+		{
+			PrintToChat(other, "Your sniper is already full.");
+			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
+			return;
+		}
+
 		if (g_LastRefilled[other] > time)
 		{
 			PrintToChat(other, "You must wait %i seconds to refill your sniper.", g_LastRefilled[other] - time);
@@ -610,11 +631,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 		g_LastRefilled[other] = time + 60;
 		EmitGameSoundToClient(other, "AmmoPack.Touch");
-
-		int weapon;
-		for (int slot = 0; slot < 3; slot++)
-			if ((weapon = GetPlayerWeaponSlot(other, slot)) != -1)
-				SetWeaponAmmo(other, weapon, 1);
+		SetWeaponAmmo(other, weapon, 1);
 		
 		return;
 	}
@@ -733,6 +750,9 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 		for (int i = 1; i <= MaxClients; i++)
 			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 				UpdateHud(i);
+		
+		if (g_LastRefilled[client] < 1)
+			g_LastRefilled[client] = GetTime() + 10;
 	}
 	
 	return MRES_Ignored;
