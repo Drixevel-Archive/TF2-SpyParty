@@ -333,6 +333,9 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
 	
+	if (TF2_GetClientTeam(client) != TFTeam_Blue)
+		return;
+	
 	if (g_IsSpy[client])
 	{
 		PrintToChatAll("%N was a spy and has died!", client);
@@ -432,7 +435,7 @@ void GetMatchStateName(char[] buffer, int size)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
-	if (g_MatchState != STATE_PLAYING)
+	if (g_MatchState != STATE_PLAYING && TF2_GetClientTeam(client) == TFTeam_Red)
 	{
 		SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetTime() + 999.0);
 
@@ -621,7 +624,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	int time = GetTime();
 
-	if (StrEqual(sName, "refill_mag", false))
+	if (StrEqual(sName, "refill_mag", false) && TF2_GetClientTeam(other) == TFTeam_Red)
 	{
 		int weapon = GetEntPropEnt(other, Prop_Send, "m_hActiveWeapon");
 
@@ -648,7 +651,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	int task = GetTaskByName(sName);
 
-	if (task == -1)
+	if (task == -1 || TF2_GetClientTeam(other) != TFTeam_Blue)
 		return;
 	
 	g_NearTask[other] = task;
@@ -687,7 +690,7 @@ public Action OnTouchTriggerEnd(int entity, int other)
 
 	int task = GetTaskByName(sName);
 
-	if (task == -1 || g_NearTask[other] != task)
+	if (task == -1 || g_NearTask[other] != task || TF2_GetClientTeam(other) != TFTeam_Blue)
 		return;
 	
 	g_NearTask[other] = -1;
@@ -736,7 +739,7 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false))
 		return Plugin_Continue;
 	
-	if (g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
+	if (TF2_GetClientTeam(client) == TFTeam_Blue && g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
 	{
 		CompleteTask(client, g_NearTask[client]);
 		g_NearTask[client] = -1;
