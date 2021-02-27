@@ -36,5 +36,34 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	HookEvent("player_spawn", Event_OnPlayerSpawn);
+}
 
+public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	CreateTimer(0.2, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_DelaySpawn(Handle timer, any data)
+{
+	int client;
+	if ((client = GetClientOfUserId(data)) == 0)
+		return Plugin_Stop;
+	
+	switch (TF2_GetClientTeam(client))
+	{
+		case TFTeam_Red:
+		{
+			TF2_SetPlayerClass(client, TFClass_Sniper);
+			TF2_RegeneratePlayer(client);
+		}
+
+		case TFTeam_Blue:
+		{
+			TF2_SetPlayerClass(client, view_as<TFClassType>(GetRandomInt(3, 9)));
+			TF2_RegeneratePlayer(client);
+		}
+	}
+
+	return Plugin_Stop;
 }
