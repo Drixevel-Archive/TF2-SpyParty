@@ -9,6 +9,10 @@
 #define PLUGIN_DESCRIPTION "An experimental gamemode where you have to assassinate spies attempting to complete objectives."
 #define PLUGIN_VERSION "1.0.0"
 
+#define STATE_HIBERNATION -1
+#define STATE_LOBBY 0
+#define STATE_PLAYING 1
+
 /*****************************/
 //Includes
 #include <sourcemod>
@@ -22,6 +26,8 @@
 /*****************************/
 //Globals
 
+Handle g_Hud;
+int g_MatchState = STATE_HIBERNATION;
 
 /*****************************/
 //Plugin Info
@@ -37,6 +43,24 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
+
+	g_Hud = CreateHudSynchronizer();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (IsPlayerAlive(i))
+			CreateTimer(0.2, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public void OnPluginEnd()
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i))
+			ClearSyncHud(i, g_Hud);
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -65,5 +89,24 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 		}
 	}
 
+	char sMatchState[32];
+	GetMatchStateName(sMatchState, sizeof(sMatchState));
+
+	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
+	ShowSyncHudText(client, g_Hud, "Match State: %s", sMatchState);
+
 	return Plugin_Stop;
+}
+
+void GetMatchStateName(char[] buffer, int size)
+{
+	switch (g_MatchState)
+	{
+		case STATE_HIBERNATION:
+			strcopy(buffer, size, "Hibernation");
+		case STATE_LOBBY:
+			strcopy(buffer, size, "Lobby");
+		case STATE_PLAYING:
+			strcopy(buffer, size, "Playing");
+	}
 }
