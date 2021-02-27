@@ -93,7 +93,15 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_SetPlayerClass(client, TFClass_Sniper);
 			TF2_RegeneratePlayer(client);
 
+			EquipWeaponSlot(client, TFWeaponSlot_Primary);
 
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Melee);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 		}
 
 		case TFTeam_Blue:
@@ -101,13 +109,33 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_SetPlayerClass(client, GetRandomClass());
 			TF2_RegeneratePlayer(client);
 
+			EquipWeaponSlot(client, TFWeaponSlot_Melee);
 
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 		}
 	}
 
 	UpdateHud(client);
 
 	return Plugin_Stop;
+}
+
+void EquipWeaponSlot(int client, int slot)
+{
+	int iWeapon = GetPlayerWeaponSlot(client, slot);
+	
+	if (IsValidEntity(iWeapon))
+	{
+		char class[64];
+		GetEntityClassname(iWeapon, class, sizeof(class));
+		FakeClientCommand(client, "use %s", class);
+	}
 }
 
 TFClassType GetRandomClass()
