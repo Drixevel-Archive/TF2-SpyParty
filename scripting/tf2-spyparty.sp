@@ -18,6 +18,7 @@
 //Includes
 #include <sourcemod>
 #include <tf2_stocks>
+#include <tf2items>
 
 /*****************************/
 //ConVars
@@ -91,12 +92,16 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 		{
 			TF2_SetPlayerClass(client, TFClass_Sniper);
 			TF2_RegeneratePlayer(client);
+
+
 		}
 
 		case TFTeam_Blue:
 		{
 			TF2_SetPlayerClass(client, GetRandomClass());
 			TF2_RegeneratePlayer(client);
+
+
 		}
 	}
 
@@ -209,6 +214,7 @@ public Action Timer_CountdownTick(Handle timer)
 			}
 		}
 
+		TF2_RespawnPlayer(i);
 		UpdateHud(i);
 
 		switch (TF2_GetClientTeam(i))
@@ -254,4 +260,9 @@ bool StopTimer(Handle& timer)
 	}
 	
 	return false;
+}
+
+public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDefinitionIndex, Handle& hItem)
+{
+	
 }
