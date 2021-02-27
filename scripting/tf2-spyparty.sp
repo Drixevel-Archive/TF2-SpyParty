@@ -70,6 +70,8 @@ Handle g_OnWeaponFire;
 int g_GiveTasks;
 Handle g_GiveTasksTimer;
 
+int g_GlowEnt[MAXPLAYERS + 1] = {-1, ...};
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -138,6 +140,24 @@ public void OnClientPutInServer(int client)
 		DHookEntity(g_OnWeaponFire, true, client);
 }
 
+public void OnClientDisconnect(int client)
+{
+	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+		AcceptEntityInput(g_GlowEnt[client], "Kill");
+}
+
+public void OnClientDisconnect_Post(int client)
+{
+	g_IsSpy[client] = false;
+
+	g_LastRefilled[client] = 0;
+
+	delete g_RequiredTasks[client];
+	g_NearTask[client] = -1;
+
+	g_GlowEnt[client] = -1;
+}
+
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
 {
 	damage = 500.0;
@@ -178,7 +198,7 @@ bool CompleteTask(int client, int task)
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
-	if (g_TotalShots >= g_MaxShots)
+	if (g_TotalTasksEx >= g_MaxTasks)
 	{
 		PrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
 		TF2_ForceWin(TFTeam_Blue);
@@ -255,8 +275,16 @@ public int MenuHandler_Tasks(Menu menu, MenuAction action, int param1, int param
 public void OnPluginEnd()
 {
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i))
+	{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (!IsFakeClient(i))
 			ClearSyncHud(i, g_Hud);
+
+		if (IsPlayerAlive(i) && g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
+			AcceptEntityInput(g_GlowEnt[i], "Kill");
+	}
 }
 
 public void OnMapStart()
@@ -278,8 +306,14 @@ public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadca
 public Action Timer_DelaySpawn(Handle timer, any data)
 {
 	int client;
-	if ((client = GetClientOfUserId(data)) == 0)
+	if ((client = GetClientOfUserId(data)) == 0 || !IsPlayerAlive(client))
 		return Plugin_Stop;
+	
+	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+	{
+		AcceptEntityInput(g_GlowEnt[client], "Kill");
+		g_GlowEnt[client] = -1;
+	}
 	
 	switch (TF2_GetClientTeam(client))
 	{
@@ -323,6 +357,8 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
+
+			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
 		}
 	}
 
@@ -364,6 +400,12 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		int attacker;
 		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
 			TF2_IgnitePlayer(attacker, attacker, 10.0);
+	}
+
+	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+	{
+		AcceptEntityInput(g_GlowEnt[client], "Kill");
+		g_GlowEnt[client] = -1;
 	}
 }
 
@@ -549,6 +591,10 @@ public Action Timer_CountdownTick(Handle timer)
 			}
 		}
 	}
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
 
 	g_GiveTasks = GetRandomInt(30, 60);
 	StopTimer(g_GiveTasksTimer);
@@ -843,13 +889,22 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 		g_RequiredTasks[i].Clear();
 		g_NearTask[i] = -1;
 
-		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
 		{
-			if (TF2_IsPlayerInCondition(i, TFCond_Zoomed))
-				TF2_RemoveCondition(i, TFCond_Zoomed);
-			
-			if (TF2_IsPlayerInCondition(i, TFCond_Slowed))
-				TF2_RemoveCondition(i, TFCond_Slowed);
+			if (TF2_GetClientTeam(i) == TFTeam_Red)
+			{
+				if (TF2_IsPlayerInCondition(i, TFCond_Zoomed))
+					TF2_RemoveCondition(i, TFCond_Zoomed);
+				
+				if (TF2_IsPlayerInCondition(i, TFCond_Slowed))
+					TF2_RemoveCondition(i, TFCond_Slowed);
+			}
+
+			if (g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
+			{
+				AcceptEntityInput(g_GlowEnt[i], "Kill");
+				g_GlowEnt[i] = -1;
+			}
 		}
 	}
 
@@ -858,4 +913,35 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 	g_GiveTasks = 0;
 	StopTimer(g_GiveTasksTimer);
+}
+
+int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255, 255})
+{
+	char sClassname[64];
+	GetEntityClassname(target, sClassname, sizeof(sClassname));
+
+	char sTarget[128];
+	Format(sTarget, sizeof(sTarget), "%s%i", sClassname, target);
+	DispatchKeyValue(target, "targetname", sTarget);
+
+	int glow = CreateEntityByName("tf_glow");
+
+	if (IsValidEntity(glow))
+	{
+		char sGlow[64];
+		Format(sGlow, sizeof(sGlow), "%i %i %i %i", color[0], color[1], color[2], color[3]);
+
+		DispatchKeyValue(glow, "targetname", name);
+		DispatchKeyValue(glow, "target", sTarget);
+		DispatchKeyValue(glow, "Mode", "1"); //Mode is currently broken.
+		DispatchKeyValue(glow, "GlowColor", sGlow);
+		DispatchSpawn(glow);
+		
+		SetVariantString("!activator");
+		AcceptEntityInput(glow, "SetParent", target, glow);
+
+		AcceptEntityInput(glow, "Enable");
+	}
+
+	return glow;
 }
