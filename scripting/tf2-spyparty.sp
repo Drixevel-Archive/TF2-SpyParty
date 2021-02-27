@@ -67,6 +67,9 @@ int g_MaxShots = 6;
 
 Handle g_OnWeaponFire;
 
+int g_GiveTasks;
+Handle g_GiveTasksTimer;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -542,7 +545,37 @@ public Action Timer_CountdownTick(Handle timer)
 		}
 	}
 
+	g_GiveTasks = GetRandomInt(30, 60);
+	StopTimer(g_GiveTasksTimer);
+	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+
 	return Plugin_Stop;
+}
+
+public Action Timer_GiveTasksTick(Handle timer)
+{
+	g_GiveTasks--;
+
+	if (g_GiveTasks > 0)
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!IsClientInGame(i))
+				continue;
+			
+			PrintHintText(i, "Next tasks in: %i", g_GiveTasks);
+			StopSound(i, SNDCHAN_STATIC, "UI/hint.wav");
+		}
+
+		return Plugin_Continue;
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+
+	g_GiveTasks = GetRandomInt(30, 60);
+	return Plugin_Continue;
 }
 
 int GetWeaponAmmo(int client, int weapon)
@@ -776,4 +809,15 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	}
 	
 	return MRES_Ignored;
+}
+
+public Action OnClientCommand(int client, int args)
+{
+	char sCommand[32];
+	GetCmdArg(0, sCommand, sizeof(sCommand));
+
+	if (g_MatchState == STATE_PLAYING || (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
+		return Plugin_Stop;
+	
+	return Plugin_Continue;
 }
