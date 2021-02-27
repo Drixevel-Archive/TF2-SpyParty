@@ -72,6 +72,8 @@ Handle g_GiveTasksTimer;
 
 int g_GlowEnt[MAXPLAYERS + 1] = {-1, ...};
 
+int g_SpyTask;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -182,6 +184,9 @@ void ParseTasks()
 
 void AddTask(int client, int task)
 {
+	if (g_IsSpy[client] && GetRandomInt(0, 10) > 2)
+		task = g_SpyTask;
+	
 	g_RequiredTasks[client].Push(task);
 	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
 	UpdateHud(client);
@@ -201,6 +206,11 @@ bool CompleteTask(int client, int task)
 	UpdateHud(client);
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
+
+	if (g_IsSpy[client] && task == g_SpyTask)
+		g_TotalTasksEx++;
+	
+	g_TotalTasksEx++;
 
 	if (g_TotalTasksEx >= g_MaxTasks)
 	{
@@ -603,6 +613,9 @@ public Action Timer_CountdownTick(Handle timer)
 
 	CreateTF2Timer(900);
 
+	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
+	PrintToChat(spy, "Priority Task: %s (Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
+	
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
 			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
