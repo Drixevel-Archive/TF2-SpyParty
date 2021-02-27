@@ -360,6 +360,10 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	else
 	{
 		PrintToChatAll("%N was NOT a spy and has died!", client);
+
+		int attacker;
+		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
+			TF2_IgnitePlayer(attacker, attacker, 10.0);
 	}
 }
 
@@ -838,6 +842,15 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 		g_RequiredTasks[i].Clear();
 		g_NearTask[i] = -1;
+
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+		{
+			if (TF2_IsPlayerInCondition(i, TFCond_Zoomed))
+				TF2_RemoveCondition(i, TFCond_Zoomed);
+			
+			if (TF2_IsPlayerInCondition(i, TFCond_Slowed))
+				TF2_RemoveCondition(i, TFCond_Slowed);
+		}
 	}
 
 	g_TotalTasksEx = 0;
