@@ -407,6 +407,22 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	int client;
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
+
+	int count;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+			count++;
+	
+	if (count <= 0)
+		TF2_ForceWin(TFTeam_Blue);
+	
+	count = 0;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 23)
+			count++;
+	
+	if (count <= 0)
+		TF2_ForceWin(TFTeam_Red);
 	
 	if (TF2_GetClientTeam(client) != TFTeam_Blue)
 		return;
@@ -417,7 +433,7 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		TF2_SetPlayerClass(client, TFClass_Spy);
 		g_IsSpy[client] = false;
 
-		int count;
+		count = 0;
 		for (int i = 1; i <= MaxClients; i++)
 			if (g_IsSpy[i])
 				count++;
