@@ -208,7 +208,10 @@ bool CompleteTask(int client, int task)
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
 	if (g_IsSpy[client] && task == g_SpyTask)
+	{
+		EmitSoundToAll("coach/coach_look_here.wav");
 		g_TotalTasksEx++;
+	}
 	
 	g_TotalTasksEx++;
 
@@ -305,6 +308,7 @@ public void OnMapStart()
 {
 	PrecacheSound("coach/coach_go_here.wav");
 	PrecacheSound("coach/coach_defend_here.wav");
+	PrecacheSound("coach/coach_look_here.wav");
 }
 
 public void OnMapEnd()
