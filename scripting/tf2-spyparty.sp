@@ -17,9 +17,7 @@
 /*****************************/
 //Includes
 #include <sourcemod>
-#include <misc-sm>
-#include <misc-tf>
-#include <misc-colors>
+#include <tf2_stocks>
 
 /*****************************/
 //ConVars
@@ -32,6 +30,8 @@ int g_MatchState = STATE_HIBERNATION;
 
 int g_Countdown;
 Handle g_CountdownTimer;
+
+bool g_IsSpy[MAXPLAYERS + 1];
 
 /*****************************/
 //Plugin Info
@@ -150,29 +150,6 @@ void StartMatch()
 {
 	g_MatchState = STATE_COUNTDOWN;
 
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i))
-			continue;
-		
-		if (IsPlayerAlive(i))
-		{
-			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime());
-
-			int weapon;
-			for (int slot = 0; slot < 3; slot++)
-			{
-				if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
-				{
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime());
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime());
-				}
-			}
-		}
-
-		TF2_RespawnPlayer(i);
-	}
-
 	g_Countdown = 5;
 	StopTimer(g_CountdownTimer);
 	g_CountdownTimer = CreateTimer(1.0, Timer_CountdownTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -194,9 +171,72 @@ public Action Timer_CountdownTick(Handle timer)
 	g_MatchState = STATE_PLAYING;
 	PrintHintTextToAll("Match has started.");
 
+	int spy = GetRandomClient(true, false, false, view_as<int>(TFTeam_Blue));
+	g_IsSpy[spy] = true;
+	
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i))
-			UpdateHud(i);
+	{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (IsPlayerAlive(i))
+		{
+			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime());
+
+			int weapon;
+			for (int slot = 0; slot < 3; slot++)
+			{
+				if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
+				{
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime());
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime());
+				}
+			}
+		}
+
+		UpdateHud(i);
+
+		switch (TF2_GetClientTeam(i))
+		{
+			case TFTeam_Red:
+			{
+				PrintToChat(i, "Hunt out the spy and assassinate them! You have a limited amount of chances, use them wisely!");
+			}
+
+			case TFTeam_Blue:
+			{
+				PrintToChat(i, "%N has been chosen as the Spy, protect them at all costs by doing basic tasks!", spy);
+			}
+		}
+	}
 
 	return Plugin_Stop;
+}
+
+int GetRandomClient(bool ingame = true, bool alive = false, bool fake = false, int team = 0)
+{
+	int[] clients = new int[MaxClients];
+	int amount;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (ingame && !IsClientInGame(i) || alive && !IsPlayerAlive(i) || !fake && IsFakeClient(i) || team > 0 && team != GetClientTeam(i))
+			continue;
+
+		clients[amount++] = i;
+	}
+
+	return (amount == 0) ? -1 : clients[GetRandomInt(0, amount - 1)];
+}
+
+bool StopTimer(Handle& timer)
+{
+	if (timer != null)
+	{
+		KillTimer(timer);
+		timer = null;
+		return true;
+	}
+	
+	return false;
 }
