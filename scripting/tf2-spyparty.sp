@@ -95,7 +95,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 
 		case TFTeam_Blue:
 		{
-			TF2_SetPlayerClass(client, view_as<TFClassType>(GetRandomInt(3, 9)));
+			TF2_SetPlayerClass(client, GetRandomClass());
 			TF2_RegeneratePlayer(client);
 		}
 	}
@@ -103,6 +103,21 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	UpdateHud(client);
 
 	return Plugin_Stop;
+}
+
+TFClassType GetRandomClass()
+{
+	TFClassType classes[7];
+
+	classes[0] = TFClass_Scout;
+	classes[1] = TFClass_Soldier;
+	classes[2] = TFClass_DemoMan;
+	classes[3] = TFClass_Medic;
+	classes[4] = TFClass_Heavy;
+	classes[5] = TFClass_Pyro;
+	classes[6] = TFClass_Engineer;
+
+	return classes[GetRandomInt(0, 6)];
 }
 
 void UpdateHud(int client)
