@@ -160,6 +160,9 @@ public void OnClientDisconnect_Post(int client)
 
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
 {
+	if ((damagetype & DMG_BURN) == DMG_BURN)
+		return Plugin_Continue;
+	
 	damage = 500.0;
 	return Plugin_Changed;
 }
@@ -399,7 +402,7 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 
 		int attacker;
 		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
-			TF2_IgnitePlayer(attacker, attacker, 10.0);
+			TF2_IgnitePlayer(attacker, attacker, 5.0);
 	}
 
 	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
@@ -886,7 +889,8 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 		g_LastRefilled[i] = 0;
 
-		g_RequiredTasks[i].Clear();
+		if (g_RequiredTasks[i] != null)
+			g_RequiredTasks[i].Clear();
 		g_NearTask[i] = -1;
 
 		if (IsClientInGame(i) && IsPlayerAlive(i))
