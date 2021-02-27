@@ -88,6 +88,7 @@ public void OnPluginStart()
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_death", Event_OnPlayerDeath);
+	HookEvent("teamplay_round_win", Event_OnRoundEnd);
 
 	AddCommandListener(Listener_VoiceMenu, "voicemenu");
 
@@ -816,8 +817,32 @@ public Action OnClientCommand(int client, int args)
 	char sCommand[32];
 	GetCmdArg(0, sCommand, sizeof(sCommand));
 
-	if (g_MatchState == STATE_PLAYING || (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
+	if (g_MatchState == STATE_PLAYING && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
 	
 	return Plugin_Continue;
+}
+
+public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	g_MatchState = STATE_HIBERNATION;
+
+	g_Countdown = 0;
+	StopTimer(g_CountdownTimer);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_IsSpy[i] = false;
+
+		g_LastRefilled[i] = 0;
+
+		g_RequiredTasks[i].Clear();
+		g_NearTask[i] = -1;
+	}
+
+	g_TotalTasksEx = 0;
+	g_TotalShots = 0;
+
+	g_GiveTasks = 0;
+	StopTimer(g_GiveTasksTimer);
 }
