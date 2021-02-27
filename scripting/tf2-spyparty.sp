@@ -19,6 +19,7 @@
 #include <sourcemod>
 #include <tf2_stocks>
 #include <tf2items>
+#include <tf2attributes>
 
 /*****************************/
 //ConVars
@@ -102,6 +103,16 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
+
+			int weapon;
+			for (int slot = 0; slot < 3; slot++)
+			{
+				if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
+				{
+					SetWeaponAmmo(client, weapon, 1);
+					TF2Attrib_SetByName(weapon, "maxammo primary reduced", 10.0);
+				}
+			}
 		}
 
 		case TFTeam_Blue:
@@ -219,7 +230,15 @@ public Action Timer_CountdownTick(Handle timer)
 	g_MatchState = STATE_PLAYING;
 	PrintHintTextToAll("Match has started.");
 
-	int spy = GetRandomClient(true, false, false, view_as<int>(TFTeam_Blue));
+	int spy = GetRandomClient(true, false, true, view_as<int>(TFTeam_Blue));
+
+	if (spy == -1)
+	{
+		g_MatchState = STATE_LOBBY;
+		PrintToChatAll("Aborting starting match, couldn't find a spy.");
+		return Plugin_Stop;
+	}
+	
 	g_IsSpy[spy] = true;
 	
 	for (int i = 1; i <= MaxClients; i++)
@@ -250,6 +269,16 @@ public Action Timer_CountdownTick(Handle timer)
 			case TFTeam_Red:
 			{
 				PrintToChat(i, "Hunt out the spy and assassinate them! You have a limited amount of chances, use them wisely!");
+
+				int weapon;
+				for (int slot = 0; slot < 3; slot++)
+				{
+					if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
+					{
+						SetWeaponAmmo(i, weapon, 1);
+						TF2Attrib_SetByName(weapon, "maxammo primary reduced", 10.0);
+					}
+				}
 			}
 
 			case TFTeam_Blue:
@@ -260,6 +289,14 @@ public Action Timer_CountdownTick(Handle timer)
 	}
 
 	return Plugin_Stop;
+}
+
+void SetWeaponAmmo(int client, int weapon, int ammo)
+{
+	int iAmmoType = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
+	
+	if (iAmmoType != -1)
+		SetEntProp(client, Prop_Data, "m_iAmmo", ammo, _, iAmmoType);
 }
 
 int GetRandomClient(bool ingame = true, bool alive = false, bool fake = false, int team = 0)
@@ -292,5 +329,13 @@ bool StopTimer(Handle& timer)
 
 public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDefinitionIndex, Handle& hItem)
 {
-	
+	if (TF2_GetClientTeam(client) == TFTeam_Red)
+	{
+		hItem = TF2Items_CreateItem(PRESERVE_ATTRIBUTES | OVERRIDE_ATTRIBUTES);
+		TF2Items_SetNumAttributes(hItem, 1);
+		TF2Items_SetAttribute(hItem, 0, 77, 10.0);
+		return Plugin_Changed;
+	}
+
+	return Plugin_Continue;
 }
