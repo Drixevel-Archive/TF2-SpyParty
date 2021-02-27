@@ -11,7 +11,8 @@
 
 #define STATE_HIBERNATION -1
 #define STATE_LOBBY 0
-#define STATE_PLAYING 1
+#define STATE_COUNTDOWN 1
+#define STATE_PLAYING 2
 
 /*****************************/
 //Includes
@@ -29,6 +30,9 @@
 Handle g_Hud;
 int g_MatchState = STATE_HIBERNATION;
 
+int g_Countdown;
+Handle g_CountdownTimer;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -43,6 +47,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
+
+	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 
 	g_Hud = CreateHudSynchronizer();
 
@@ -61,6 +67,11 @@ public void OnPluginEnd()
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i))
 			ClearSyncHud(i, g_Hud);
+}
+
+public void OnMapEnd()
+{
+	g_CountdownTimer = null;
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -89,13 +100,18 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 		}
 	}
 
+	UpdateHud(client);
+
+	return Plugin_Stop;
+}
+
+void UpdateHud(int client)
+{
 	char sMatchState[32];
 	GetMatchStateName(sMatchState, sizeof(sMatchState));
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
 	ShowSyncHudText(client, g_Hud, "Match State: %s", sMatchState);
-
-	return Plugin_Stop;
 }
 
 void GetMatchStateName(char[] buffer, int size)
@@ -105,9 +121,11 @@ void GetMatchStateName(char[] buffer, int size)
 		case STATE_HIBERNATION:
 			strcopy(buffer, size, "Hibernation");
 		case STATE_LOBBY:
-			strcopy(buffer, size, "Lobby");
+			strcopy(buffer, size, "Waiting");
+		case STATE_COUNTDOWN:
+			strcopy(buffer, size, "Starting");
 		case STATE_PLAYING:
-			strcopy(buffer, size, "Playing");
+			strcopy(buffer, size, "Live");
 	}
 }
 
@@ -119,4 +137,66 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetTime() + 999.0);
 		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
 	}
+}
+
+public Action Command_Start(int client, int args)
+{
+	StartMatch();
+	PrintToChat(client, "%N has started the match.", client);
+	return Plugin_Handled;
+}
+
+void StartMatch()
+{
+	g_MatchState = STATE_COUNTDOWN;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (IsPlayerAlive(i))
+		{
+			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime());
+
+			int weapon;
+			for (int slot = 0; slot < 3; slot++)
+			{
+				if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
+				{
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime());
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime());
+				}
+			}
+		}
+
+		TF2_RespawnPlayer(i);
+	}
+
+	g_Countdown = 5;
+	StopTimer(g_CountdownTimer);
+	g_CountdownTimer = CreateTimer(1.0, Timer_CountdownTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_CountdownTick(Handle timer)
+{
+	g_Countdown--;
+
+	if (g_Countdown > 0)
+	{
+		PrintHintTextToAll("Match Starting in... %i", g_Countdown);
+		return Plugin_Continue;
+	}
+
+	g_Countdown = 0;
+	g_CountdownTimer = null;
+
+	g_MatchState = STATE_PLAYING;
+	PrintHintTextToAll("Match has started.");
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i))
+			UpdateHud(i);
+
+	return Plugin_Stop;
 }
