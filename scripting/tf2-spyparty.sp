@@ -20,6 +20,7 @@
 //Includes
 #include <sourcemod>
 #include <sdkhooks>
+#include <dhooks>
 #include <tf2_stocks>
 #include <tf2items>
 #include <tf2attributes>
@@ -58,6 +59,14 @@ int g_TotalTasks;
 ArrayList g_RequiredTasks[MAXPLAYERS + 1];
 int g_NearTask[MAXPLAYERS + 1] = {-1, ...};
 
+int g_TotalTasksEx;
+int g_TotalShots;
+
+int g_MaxTasks = 20;
+int g_MaxShots = 6;
+
+Handle g_OnWeaponFire;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -80,6 +89,20 @@ public void OnPluginStart()
 	AddCommandListener(Listener_VoiceMenu, "voicemenu");
 
 	g_Hud = CreateHudSynchronizer();
+
+	Handle config;
+	if ((config = LoadGameConfigFile("tf2.spyparty")) != null)
+	{
+		int offset = GameConfGetOffset(config, "CBasePlayer::OnMyWeaponFired");
+		
+		if (offset != -1)
+		{
+			g_OnWeaponFire = DHookCreate(offset, HookType_Entity, ReturnType_Void, ThisPointer_CBaseEntity, OnMyWeaponFired);
+			DHookAddParam(g_OnWeaponFire, HookParamType_Int);
+		}
+		
+		delete config;
+	}
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -106,6 +129,9 @@ public void OnClientPutInServer(int client)
 
 	delete g_RequiredTasks[client];
 	g_RequiredTasks[client] = new ArrayList();
+
+	if (g_OnWeaponFire != null)
+		DHookEntity(g_OnWeaponFire, true, client);
 }
 
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -360,10 +386,23 @@ void UpdateHud(int client)
 	char sMatchState[32];
 	GetMatchStateName(sMatchState, sizeof(sMatchState));
 
-	int tasks = GetTasksCount(client);
+	char sTeamHud[64];
+	switch (TF2_GetClientTeam(client))
+	{
+		case TFTeam_Red:
+		{
+			FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, g_MaxShots);
+		}
+
+		case TFTeam_Blue:
+		{
+			int tasks = GetTasksCount(client);
+			FormatEx(sTeamHud, sizeof(sTeamHud), "Available Tasks: %i\nTotal Tasks: %i/%i", tasks, g_TotalTasksEx, g_MaxTasks);
+		}
+	}
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s\nAvailable Tasks: %i", sMatchState, tasks);
+	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s", sMatchState, sTeamHud);
 }
 
 void GetMatchStateName(char[] buffer, int size)
@@ -426,6 +465,9 @@ public Action Timer_CountdownTick(Handle timer)
 
 	g_MatchState = STATE_PLAYING;
 	PrintHintTextToAll("Match has started.");
+
+	g_TotalTasksEx = 0;
+	g_TotalShots = 0;
 
 	int spy = GetRandomClient(true, false, true, view_as<int>(TFTeam_Blue));
 
@@ -675,4 +717,23 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	}
 
 	return Plugin_Continue;
+}
+
+public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
+{
+	if (client < 1 || client > MaxClients || !IsValidEntity(client) || !IsPlayerAlive(client))
+		return MRES_Ignored;
+	
+	//int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+
+	if (TF2_GetClientTeam(client) == TFTeam_Red)
+	{
+		g_TotalShots++;
+		
+		for (int i = 1; i <= MaxClients; i++)
+			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+				UpdateHud(i);
+	}
+	
+	return MRES_Ignored;
 }
