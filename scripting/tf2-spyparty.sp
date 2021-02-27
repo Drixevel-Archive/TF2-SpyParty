@@ -75,6 +75,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
+	HookEvent("player_death", Event_OnPlayerDeath);
 
 	AddCommandListener(Listener_VoiceMenu, "voicemenu");
 
@@ -101,8 +102,16 @@ public void OnPluginStart()
 
 public void OnClientPutInServer(int client)
 {
+	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+
 	delete g_RequiredTasks[client];
 	g_RequiredTasks[client] = new ArrayList();
+}
+
+public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
+{
+	damage = 500.0;
+	return Plugin_Changed;
 }
 
 void ParseTasks()
@@ -122,6 +131,8 @@ void AddTask(int client, int task)
 	g_RequiredTasks[client].Push(task);
 	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
 	UpdateHud(client);
+
+	EmitSoundToClient(client, "coach/coach_go_here.wav");
 }
 
 bool CompleteTask(int client, int task)
@@ -134,6 +145,8 @@ bool CompleteTask(int client, int task)
 
 	PrintToChat(client, "You have completed the task: %s", g_Tasks[task].name);
 	UpdateHud(client);
+
+	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
 	return true;
 }
@@ -209,6 +222,12 @@ public void OnPluginEnd()
 			ClearSyncHud(i, g_Hud);
 }
 
+public void OnMapStart()
+{
+	PrecacheSound("coach/coach_go_here.wav");
+	PrecacheSound("coach/coach_defend_here.wav");
+}
+
 public void OnMapEnd()
 {
 	g_CountdownTimer = null;
@@ -273,6 +292,40 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	UpdateHud(client);
 
 	return Plugin_Stop;
+}
+
+public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	int client;
+	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
+		return;
+	
+	if (g_IsSpy[client])
+	{
+		PrintToChatAll("%N was a spy and has died!", client);
+		TF2_SetPlayerClass(client, TFClass_Spy);
+		g_IsSpy[client] = false;
+
+		int count;
+		for (int i = 1; i <= MaxClients; i++)
+			if (g_IsSpy[i])
+				count++;
+		
+		if (count <= 0)
+			TF2_ForceWin(TFTeam_Red);
+	}
+	else
+	{
+		PrintToChatAll("%N was NOT a spy and has died!", client);
+	}
+}
+
+stock void TF2_ForceWin(TFTeam team = TFTeam_Unassigned)
+{
+	int iFlags = GetCommandFlags("mp_forcewin");
+	SetCommandFlags("mp_forcewin", iFlags &= ~FCVAR_CHEAT);
+	ServerCommand("mp_forcewin %i", view_as<int>(team));
+	SetCommandFlags("mp_forcewin", iFlags);
 }
 
 void EquipWeaponSlot(int client, int slot)
