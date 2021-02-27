@@ -52,7 +52,7 @@ public void OnPluginStart()
 			continue;
 		
 		if (IsPlayerAlive(i))
-			CreateTimer(0.2, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.1, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
@@ -65,7 +65,7 @@ public void OnPluginEnd()
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	CreateTimer(0.2, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.1, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_DelaySpawn(Handle timer, any data)
@@ -108,5 +108,15 @@ void GetMatchStateName(char[] buffer, int size)
 			strcopy(buffer, size, "Lobby");
 		case STATE_PLAYING:
 			strcopy(buffer, size, "Playing");
+	}
+}
+
+public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
+{
+	if (g_MatchState != STATE_PLAYING)
+	{
+		SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetTime() + 999.0);
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetTime() + 999.0);
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
 	}
 }
