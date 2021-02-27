@@ -90,6 +90,7 @@ public void OnPluginStart()
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_death", Event_OnPlayerDeath);
+	HookEvent("teamplay_round_start", Event_OnRoundStart);
 	HookEvent("teamplay_round_win", Event_OnRoundEnd);
 
 	AddCommandListener(Listener_VoiceMenu, "voicemenu");
@@ -118,7 +119,7 @@ public void OnPluginStart()
 		OnClientPutInServer(i);
 		
 		if (IsPlayerAlive(i))
-			CreateTimer(0.1, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
+			TF2_RespawnPlayer(i);
 	}
 
 	int entity = -1; char classname[64];
@@ -305,13 +306,13 @@ public void OnMapEnd()
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	CreateTimer(0.1, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.2, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_DelaySpawn(Handle timer, any data)
 {
 	int client;
-	if ((client = GetClientOfUserId(data)) == 0 || !IsPlayerAlive(client))
+	if ((client = GetClientOfUserId(data)) == 0)
 		return Plugin_Stop;
 	
 	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
@@ -404,7 +405,10 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 
 		int attacker;
 		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
+		{
+			PrintToChat(attacker, "You have shot the wrong target!");
 			TF2_IgnitePlayer(attacker, attacker, 5.0);
+		}
 	}
 
 	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
@@ -878,6 +882,13 @@ public Action OnClientCommand(int client, int args)
 		return Plugin_Stop;
 	
 	return Plugin_Continue;
+}
+
+public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && !IsFakeClient(i))
+			UpdateHud(i);
 }
 
 public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
