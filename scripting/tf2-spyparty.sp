@@ -368,9 +368,17 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	int time = GetTime();
 
-	if (StrEqual(sName, "refill_mag", false) && g_LastRefilled[other] < time)
+	if (StrEqual(sName, "refill_mag", false))
 	{
+		if (g_LastRefilled[other] > time)
+		{
+			PrintToChat(other, "You must wait %i seconds to refill your sniper.", g_LastRefilled[other] - time);
+			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
+			return;
+		}
+
 		g_LastRefilled[other] = time + 60;
+		EmitGameSoundToClient(other, "AmmoPack.Touch");
 
 		int weapon;
 		for (int slot = 0; slot < 3; slot++)
