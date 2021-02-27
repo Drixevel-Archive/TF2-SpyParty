@@ -298,7 +298,9 @@ public void OnMapStart()
 
 public void OnMapEnd()
 {
+	g_MatchState = STATE_HIBERNATION;
 	g_CountdownTimer = null;
+	g_GiveTasksTimer = null;
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -594,6 +596,8 @@ public Action Timer_CountdownTick(Handle timer)
 			}
 		}
 	}
+
+	CreateTF2Timer(900);
 
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
@@ -948,4 +952,25 @@ int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255,
 	}
 
 	return glow;
+}
+
+void CreateTF2Timer(int timer)
+{
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		entity = CreateEntityByName("team_round_timer");
+
+	char sTime[32];
+	IntToString(timer, sTime, sizeof(sTime));
+	
+	DispatchKeyValue(entity, "reset_time", "1");
+	DispatchKeyValue(entity, "auto_countdown", "0");
+	DispatchKeyValue(entity, "timer_length", sTime);
+	DispatchSpawn(entity);
+
+	AcceptEntityInput(entity, "Resume");
+
+	SetVariantInt(1);
+	AcceptEntityInput(entity, "ShowInHUD");
 }
