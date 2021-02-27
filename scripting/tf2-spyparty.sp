@@ -71,10 +71,12 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	HookEvent("player_spawn", Event_OnPlayerSpawn);
-
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
+
+	HookEvent("player_spawn", Event_OnPlayerSpawn);
+
+	AddCommandListener(Listener_VoiceMenu, "voicemenu");
 
 	g_Hud = CreateHudSynchronizer();
 
@@ -120,6 +122,20 @@ void AddTask(int client, int task)
 	g_RequiredTasks[client].Push(task);
 	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
 	UpdateHud(client);
+}
+
+bool CompleteTask(int client, int task)
+{
+	if (!HasTask(client, task))
+		return false;
+	
+	int index = g_RequiredTasks[client].FindValue(task);
+	g_RequiredTasks[client].Erase(index);
+
+	PrintToChat(client, "You have completed the task: %s", g_Tasks[task].name);
+	UpdateHud(client);
+
+	return true;
 }
 
 int GetTasksCount(int client)
@@ -317,8 +333,12 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	if (g_MatchState != STATE_PLAYING)
 	{
 		SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetTime() + 999.0);
-		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetTime() + 999.0);
-		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
+
+		if (weapon > 0)
+		{
+			SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetTime() + 999.0);
+			SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
+		}
 	}
 }
 
@@ -581,4 +601,25 @@ int GetTaskByName(const char[] task)
 			return i;
 	
 	return -1;
+}
+
+public Action Listener_VoiceMenu(int client, const char[] command, int argc)
+{
+	char sVoice[32];
+	GetCmdArg(1, sVoice, sizeof(sVoice));
+
+	char sVoice2[32];
+	GetCmdArg(2, sVoice2, sizeof(sVoice2));
+	
+	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false))
+		return Plugin_Continue;
+	
+	if (g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
+	{
+		CompleteTask(client, g_NearTask[client]);
+		g_NearTask[client] = -1;
+		return Plugin_Stop;
+	}
+
+	return Plugin_Continue;
 }
