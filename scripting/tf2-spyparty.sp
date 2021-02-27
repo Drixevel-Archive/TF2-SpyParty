@@ -14,6 +14,8 @@
 #define STATE_COUNTDOWN 1
 #define STATE_PLAYING 2
 
+#define ACTION_GIVE 0
+
 /*****************************/
 //Includes
 #include <sourcemod>
@@ -38,6 +40,24 @@ bool g_IsSpy[MAXPLAYERS + 1];
 
 int g_LastRefilled[MAXPLAYERS + 1];
 
+enum struct Tasks
+{
+	char name[128];
+	char trigger[128];
+
+	void Add(const char[] name, const char[] trigger)
+	{
+		strcopy(this.name, 128, name);
+		strcopy(this.trigger, 128, trigger);
+	}
+}
+
+Tasks g_Tasks[32];
+int g_TotalTasks;
+
+ArrayList g_RequiredTasks[MAXPLAYERS + 1];
+int g_NearTask[MAXPLAYERS + 1] = {-1, ...};
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -54,6 +74,7 @@ public void OnPluginStart()
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
+	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 
 	g_Hud = CreateHudSynchronizer();
 
@@ -61,6 +82,8 @@ public void OnPluginStart()
 	{
 		if (!IsClientInGame(i))
 			continue;
+		
+		OnClientPutInServer(i);
 		
 		if (IsPlayerAlive(i))
 			CreateTimer(0.1, Timer_DelaySpawn, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
@@ -70,6 +93,97 @@ public void OnPluginStart()
 	while ((entity = FindEntityByClassname(entity, "*")) != -1)
 		if (GetEntityClassname(entity, classname, sizeof(classname)))
 			OnEntityCreated(entity, classname);
+	
+	ParseTasks();
+}
+
+public void OnClientPutInServer(int client)
+{
+	delete g_RequiredTasks[client];
+	g_RequiredTasks[client] = new ArrayList();
+}
+
+void ParseTasks()
+{
+	g_TotalTasks = 0;
+	g_Tasks[g_TotalTasks++].Add("Rearrange Boxes", "task_boxes");
+	g_Tasks[g_TotalTasks++].Add("Manage Data", "task_data");
+	g_Tasks[g_TotalTasks++].Add("Tighten the Valve", "task_valve");
+	g_Tasks[g_TotalTasks++].Add("Paint a Painting", "task_paint");
+	g_Tasks[g_TotalTasks++].Add("Plot World Domination", "task_plot");
+	g_Tasks[g_TotalTasks++].Add("Make Food", "task_food");
+	g_Tasks[g_TotalTasks++].Add("Play Pool", "task_pool");
+}
+
+void AddTask(int client, int task)
+{
+	g_RequiredTasks[client].Push(task);
+	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
+	UpdateHud(client);
+}
+
+int GetTasksCount(int client)
+{
+	return g_RequiredTasks[client].Length;
+}
+
+bool HasTask(int client, int task)
+{
+	if (g_RequiredTasks[client].FindValue(task) != -1)
+		return true;
+	
+	return false;
+}
+
+public Action Command_GiveTask(int client, int args)
+{
+	OpenTasksMenu(client, ACTION_GIVE);
+	return Plugin_Handled;
+}
+
+void OpenTasksMenu(int client, int action)
+{
+	Menu menu = new Menu(MenuHandler_Tasks);
+	menu.SetTitle("Pick a task:");
+
+	char sID[16];
+	for (int i = 0; i < g_TotalTasks; i++)
+	{
+		IntToString(i, sID, sizeof(sID));
+		menu.AddItem(sID, g_Tasks[i].name);
+	}
+	
+	PushMenuInt(menu, "action", action);
+
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int MenuHandler_Tasks(Menu menu, MenuAction action, int param1, int param2)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			char sInfo[16];
+			menu.GetItem(param2, sInfo, sizeof(sInfo));
+
+			int task = StringToInt(sInfo);
+			int chosen_action = GetMenuInt(menu, "action");
+
+			switch (chosen_action)
+			{
+				case ACTION_GIVE:
+				{
+					AddTask(param1, task);
+				}
+			}
+
+			OpenTasksMenu(param1, chosen_action);
+		}
+
+		case MenuAction_End:
+			delete menu;
+	}
 }
 
 public void OnPluginEnd()
@@ -177,8 +291,10 @@ void UpdateHud(int client)
 	char sMatchState[32];
 	GetMatchStateName(sMatchState, sizeof(sMatchState));
 
+	int tasks = GetTasksCount(client);
+
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s", sMatchState);
+	ShowSyncHudText(client, g_Hud, "Match State: %s\nAvailable Tasks: %i", sMatchState, tasks);
 }
 
 void GetMatchStateName(char[] buffer, int size)
@@ -384,6 +500,24 @@ public Action OnTouchTriggerStart(int entity, int other)
 		for (int slot = 0; slot < 3; slot++)
 			if ((weapon = GetPlayerWeaponSlot(other, slot)) != -1)
 				SetWeaponAmmo(other, weapon, 1);
+		
+		return;
+	}
+
+	int task = GetTaskByName(sName);
+
+	if (task == -1)
+		return;
+	
+	g_NearTask[other] = task;
+	
+	if (HasTask(other, task))
+	{
+		PrintToChat(other, "You have this task, press MEDIC! to start this task.");
+	}
+	else
+	{
+		PrintToChat(other, "You don't have this task, move to a task that you have.");
 	}
 }
 
@@ -403,15 +537,48 @@ public Action OnTouchTrigger(int entity, int other)
 
 public Action OnTouchTriggerEnd(int entity, int other)
 {
-
 	if (other < 1 || other > MaxClients)
 		return;
 	
 	char sName[64];
 	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
 
-	if (StrEqual(sName, "", false))
-	{
-		
-	}
+	int task = GetTaskByName(sName);
+
+	if (task == -1 || g_NearTask[other] != task)
+		return;
+	
+	g_NearTask[other] = -1;
+}
+
+bool PushMenuInt(Menu menu, const char[] id, int value)
+{
+	if (menu == null || strlen(id) == 0)
+		return false;
+	
+	char sBuffer[128];
+	IntToString(value, sBuffer, sizeof(sBuffer));
+	return menu.AddItem(id, sBuffer, ITEMDRAW_IGNORE);
+}
+
+int GetMenuInt(Menu menu, const char[] id, int defaultvalue = 0)
+{
+	if (menu == null || strlen(id) == 0)
+		return defaultvalue;
+	
+	char info[128]; char data[128];
+	for (int i = 0; i < menu.ItemCount; i++)
+		if (menu.GetItem(i, info, sizeof(info), _, data, sizeof(data)) && StrEqual(info, id))
+			return StringToInt(data);
+	
+	return defaultvalue;
+}
+
+int GetTaskByName(const char[] task)
+{
+	for (int i = 0; i < g_TotalTasks; i++)
+		if (StrEqual(task, g_Tasks[i].trigger, false))
+			return i;
+	
+	return -1;
 }
