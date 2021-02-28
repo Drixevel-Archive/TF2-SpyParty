@@ -1,3 +1,11 @@
+/*
+Force players to do tasks.
+Make it so you get 2-3 random tasks every 20-30 seconds
+1 sniper per 3 blues
+5 tasks per blue
+2 shots per sniper
+*/
+
 /*****************************/
 //Pragma
 #pragma semicolon 1
@@ -62,8 +70,8 @@ int g_NearTask[MAXPLAYERS + 1] = {-1, ...};
 int g_TotalTasksEx;
 int g_TotalShots;
 
-int g_MaxTasks = 20;
-int g_MaxShots = 6;
+int g_MaxTasks = 30;
+int g_MaxShots = 4;
 
 Handle g_OnWeaponFire;
 
@@ -92,6 +100,7 @@ public void OnPluginStart()
 {
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
+	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_death", Event_OnPlayerDeath);
@@ -135,6 +144,26 @@ public void OnPluginStart()
 	ParseTasks();
 
 	FindConVar("mp_respawnwavetime").IntValue = 10;
+	FindConVar("mp_autoteambalance").IntValue = 0;
+	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
+	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+}
+
+public Action Command_Spy(int client, int args)
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && g_IsSpy[i])
+			PrintToChat(client, "%N is currently a spy!", i);
+	
+	return Plugin_Handled;
+}
+
+public void OnConfigsExecuted()
+{
+	FindConVar("mp_respawnwavetime").IntValue = 10;
+	FindConVar("mp_autoteambalance").IntValue = 0;
+	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
+	FindConVar("mp_scrambleteams_auto").IntValue = 0;
 }
 
 public void OnClientPutInServer(int client)
@@ -171,6 +200,13 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 	if ((damagetype & DMG_BURN) == DMG_BURN)
 		return Plugin_Continue;
 	
+	if (TF2_GetClientTeam(victim) == TFTeam_Blue && (damagetype & DMG_FALL) == DMG_FALL)
+	{
+		//KickClient(victim, "Suicide is illegal here.");
+		damage = 0.0;
+		return Plugin_Changed;
+	}
+
 	damage = 500.0;
 	return Plugin_Changed;
 }
@@ -208,7 +244,6 @@ bool CompleteTask(int client, int task)
 	g_RequiredTasks[client].Erase(index);
 
 	PrintToChat(client, "You have completed the task: %s", g_Tasks[task].name);
-	UpdateHud(client);
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
@@ -219,6 +254,10 @@ bool CompleteTask(int client, int task)
 	}
 	
 	g_TotalTasksEx++;
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i))
+			UpdateHud(i);
 
 	if (g_TotalTasksEx >= g_MaxTasks)
 	{
@@ -367,15 +406,15 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 
+			int entity;
+			while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
+				if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+					TF2_RemoveWearable(client, entity);
+
 			int weapon;
 			for (int slot = 0; slot < 3; slot++)
-			{
 				if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
-				{
 					SetWeaponAmmo(client, weapon, 1);
-					TF2Attrib_SetByName(weapon, "maxammo primary reduced", 10.0);
-				}
-			}
 		}
 
 		case TFTeam_Blue:
@@ -393,6 +432,11 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 
+			int entity;
+			while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
+				if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+					TF2_RemoveWearable(client, entity);
+
 			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
 		}
 	}
@@ -404,27 +448,19 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 
 public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
+	CreateTimer(0.5, Timer_CheckDeath, _, TIMER_FLAG_NO_MAPCHANGE);
+
 	int client;
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
-
-	int count;
-	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-			count++;
 	
-	if (count <= 0)
-		TF2_ForceWin(TFTeam_Blue);
+	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+	{
+		AcceptEntityInput(g_GlowEnt[client], "Kill");
+		g_GlowEnt[client] = -1;
+	}
 	
-	count = 0;
-	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 23)
-			count++;
-	
-	if (count <= 0)
-		TF2_ForceWin(TFTeam_Red);
-	
-	if (TF2_GetClientTeam(client) != TFTeam_Blue)
+	if (TF2_GetClientTeam(client) != TFTeam_Blue || g_MatchState != STATE_PLAYING)
 		return;
 	
 	if (g_IsSpy[client])
@@ -432,17 +468,6 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		PrintToChatAll("%N was a spy and has died!", client);
 		TF2_SetPlayerClass(client, TFClass_Spy);
 		g_IsSpy[client] = false;
-
-		count = 0;
-		for (int i = 1; i <= MaxClients; i++)
-			if (g_IsSpy[i])
-				count++;
-		
-		if (count <= 0)
-		{
-			PrintToChatAll("Red has eliminated all spies on the Blue team, Red wins the round.");
-			TF2_ForceWin(TFTeam_Red);
-		}
 	}
 	else
 	{
@@ -452,14 +477,43 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
 		{
 			PrintToChat(attacker, "You have shot the wrong target!");
-			TF2_IgnitePlayer(attacker, attacker, 5.0);
+			TF2_IgnitePlayer(attacker, attacker, 10.0);
 		}
 	}
+}
 
-	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+public Action Timer_CheckDeath(Handle timer)
+{
+	if (g_MatchState == STATE_PLAYING)
 	{
-		AcceptEntityInput(g_GlowEnt[client], "Kill");
-		g_GlowEnt[client] = -1;
+		int count;
+
+		count = 0;
+		for (int i = 1; i <= MaxClients; i++)
+			if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				count++;
+		
+		if (count < 1)
+			TF2_ForceWin(TFTeam_Blue);
+		
+		count = 0;
+		for (int i = 1; i <= MaxClients; i++)
+			if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
+				count++;
+		
+		if (count < 1)
+			TF2_ForceWin(TFTeam_Red);
+		
+		count = 0;
+		for (int i = 1; i <= MaxClients; i++)
+			if (g_IsSpy[i])
+				count++;
+		
+		if (count < 1)
+		{
+			PrintToChatAll("Red has eliminated all spies on the Blue team, Red wins the round.");
+			TF2_ForceWin(TFTeam_Red);
+		}
 	}
 }
 
@@ -514,12 +568,12 @@ void UpdateHud(int client)
 		case TFTeam_Blue:
 		{
 			int tasks = GetTasksCount(client);
-			FormatEx(sTeamHud, sizeof(sTeamHud), "Available Tasks: %i\nTotal Tasks: %i/%i", tasks, g_TotalTasksEx, g_MaxTasks);
+			FormatEx(sTeamHud, sizeof(sTeamHud), "Available Tasks: %i", tasks);
 		}
 	}
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s", sMatchState, sTeamHud);
+	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s\nTotal Tasks: %i/%i", sMatchState, sTeamHud, g_TotalTasksEx, g_MaxTasks);
 }
 
 void GetMatchStateName(char[] buffer, int size)
@@ -689,7 +743,7 @@ public Action Timer_CountdownTick(Handle timer)
 	g_TotalTasksEx = 0;
 	g_TotalShots = 0;
 
-	int spy = GetRandomClient(true, false, true, view_as<int>(TFTeam_Blue));
+	int spy = GetRandomClient();
 
 	if (spy == -1)
 	{
@@ -699,6 +753,8 @@ public Action Timer_CountdownTick(Handle timer)
 	}
 	
 	g_IsSpy[spy] = true;
+	PrintCenterText(spy, "YOU ARE THE SPY!");
+	EmitSoundToClient(spy, "coach/coach_look_here.wav");
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -733,13 +789,8 @@ public Action Timer_CountdownTick(Handle timer)
 
 				int weapon;
 				for (int slot = 0; slot < 3; slot++)
-				{
 					if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
-					{
 						SetWeaponAmmo(i, weapon, 1);
-						TF2Attrib_SetByName(weapon, "maxammo primary reduced", 10.0);
-					}
-				}
 			}
 
 			case TFTeam_Blue:
@@ -756,10 +807,18 @@ public Action Timer_CountdownTick(Handle timer)
 	PrintToChat(spy, "Priority Task: %s (Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
 	
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+		{
+			g_RequiredTasks[i].Clear();
 			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			//AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			ShowTasksPanel(i);
+		}
+	}
 
-	g_GiveTasks = GetRandomInt(30, 60);
+	g_GiveTasks = GetRandomInt(60, 80);
 	StopTimer(g_GiveTasksTimer);
 	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
@@ -785,11 +844,41 @@ public Action Timer_GiveTasksTick(Handle timer)
 	}
 
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+		{
+			g_RequiredTasks[i].Clear();
 			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			//AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			ShowTasksPanel(i);
+		}
+	}
 
-	g_GiveTasks = GetRandomInt(30, 60);
+	g_GiveTasks = GetRandomInt(60, 80);
 	return Plugin_Continue;
+}
+
+void ShowTasksPanel(int client)
+{
+	Panel panel = new Panel();
+	panel.SetTitle("Available Tasks:");
+
+	char sDisplay[128];
+	for (int i = 0; i < g_RequiredTasks[client].Length; i++)
+	{
+		int task = g_RequiredTasks[client].Get(i);
+		FormatEx(sDisplay, sizeof(sDisplay), "Task %i: %s", i + 1, g_Tasks[task].name);
+		panel.DrawText(sDisplay);
+	}
+
+	panel.Send(client, MenuAction_Void, MENU_TIME_FOREVER);
+	delete panel;
+}
+
+public int MenuAction_Void(Menu menu, MenuAction action, int param1, int param2)
+{
+
 }
 
 int GetWeaponAmmo(int client, int weapon)
@@ -810,20 +899,23 @@ void SetWeaponAmmo(int client, int weapon, int ammo)
 		SetEntProp(client, Prop_Data, "m_iAmmo", ammo, _, iAmmoType);
 }
 
-int GetRandomClient(bool ingame = true, bool alive = false, bool fake = false, int team = 0)
+int GetRandomClient()
 {
 	int[] clients = new int[MaxClients];
 	int amount;
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (ingame && !IsClientInGame(i) || alive && !IsPlayerAlive(i) || !fake && IsFakeClient(i) || team > 0 && team != GetClientTeam(i))
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || IsFakeClient(i) || GetClientTeam(i) != 3)
 			continue;
 
 		clients[amount++] = i;
 	}
 
-	return (amount == 0) ? -1 : clients[GetRandomInt(0, amount - 1)];
+	if (amount == 0)
+		return -1;
+
+	return clients[GetRandomInt(0, amount - 1)];
 }
 
 bool StopTimer(Handle& timer)
@@ -838,19 +930,6 @@ bool StopTimer(Handle& timer)
 	return false;
 }
 
-public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDefinitionIndex, Handle& hItem)
-{
-	if (TF2_GetClientTeam(client) == TFTeam_Red)
-	{
-		hItem = TF2Items_CreateItem(PRESERVE_ATTRIBUTES | OVERRIDE_ATTRIBUTES);
-		TF2Items_SetNumAttributes(hItem, 1);
-		TF2Items_SetAttribute(hItem, 0, 77, 10.0);
-		return Plugin_Changed;
-	}
-
-	return Plugin_Continue;
-}
-
 public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (StrEqual(classname, "trigger_multiple", false))
@@ -859,6 +938,14 @@ public void OnEntityCreated(int entity, const char[] classname)
 		SDKHook(entity, SDKHook_Touch, OnTouchTrigger);
 		SDKHook(entity, SDKHook_EndTouch, OnTouchTriggerEnd);
 	}
+
+	if (StrContains(classname, "ammo", false) != -1)
+		SDKHook(entity, SDKHook_Spawn, OnBlockSpawn);
+}
+
+public Action OnBlockSpawn(int entity)
+{
+	return Plugin_Stop;
 }
 
 public Action OnTouchTriggerStart(int entity, int other)
@@ -1041,6 +1128,11 @@ public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcas
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && !IsFakeClient(i))
 			UpdateHud(i);
+	
+	FindConVar("mp_respawnwavetime").IntValue = 10;
+	FindConVar("mp_autoteambalance").IntValue = 0;
+	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
+	FindConVar("mp_scrambleteams_auto").IntValue = 0;
 }
 
 public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
