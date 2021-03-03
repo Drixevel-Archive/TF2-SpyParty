@@ -39,6 +39,26 @@ Make it so you get 2-3 random tasks every 20-30 seconds
 /*****************************/
 //Globals
 
+enum TF2Quality {
+	TF2Quality_Normal = 0, // 0
+	TF2Quality_Rarity1,
+	TF2Quality_Genuine = 1,
+	TF2Quality_Rarity2,
+	TF2Quality_Vintage,
+	TF2Quality_Rarity3,
+	TF2Quality_Rarity4,
+	TF2Quality_Unusual = 5,
+	TF2Quality_Unique,
+	TF2Quality_Community,
+	TF2Quality_Developer,
+	TF2Quality_Selfmade,
+	TF2Quality_Customized, // 10
+	TF2Quality_Strange,
+	TF2Quality_Completed,
+	TF2Quality_Haunted,
+	TF2Quality_ToborA
+};
+
 int g_GlowSprite;
 
 int g_IsAimingAt[MAXPLAYERS + 1] = {-1, ...};
@@ -73,9 +93,6 @@ int g_NearTask[MAXPLAYERS + 1] = {-1, ...};
 
 int g_TotalTasksEx;
 int g_TotalShots;
-
-int g_MaxTasks = 30;
-int g_MaxShots = 4;
 
 Handle g_OnWeaponFire;
 
@@ -129,6 +146,7 @@ public void OnPluginStart()
 		delete config;
 	}
 
+	bool available;
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i))
@@ -137,8 +155,14 @@ public void OnPluginStart()
 		OnClientPutInServer(i);
 		
 		if (IsPlayerAlive(i))
+		{
 			TF2_RespawnPlayer(i);
+			available = true;
+		}
 	}
+
+	if (available)
+		g_MatchState = STATE_LOBBY;
 
 	int entity = -1; char classname[64];
 	while ((entity = FindEntityByClassname(entity, "*")) != -1)
@@ -263,7 +287,7 @@ bool CompleteTask(int client, int task)
 		if (IsClientInGame(i))
 			UpdateHud(i);
 
-	if (g_TotalTasksEx >= g_MaxTasks)
+	if (g_TotalTasksEx >= GetMaxTasks())
 	{
 		PrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
 		TF2_ForceWin(TFTeam_Blue);
@@ -402,6 +426,8 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 			TF2_SetPlayerClass(client, TFClass_Sniper);
 			TF2_RegeneratePlayer(client);
 
+			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
+			TF2_GiveItem(client, "tf_weapon_sniperrifle", 14, TF2Quality_Normal, 0, "");
 			EquipWeaponSlot(client, TFWeaponSlot_Primary);
 
 			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
@@ -454,6 +480,79 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	UpdateHud(client);
 
 	return Plugin_Stop;
+}
+
+stock int TF2_GiveItem(int client, char[] classname, int index, TF2Quality quality = TF2Quality_Normal, int level = 0, const char[] attributes = "")
+{
+	char sClass[64];
+	strcopy(sClass, sizeof(sClass), classname);
+	
+	if (StrContains(sClass, "saxxy", false) != -1)
+	{
+		switch (TF2_GetPlayerClass(client))
+		{
+			case TFClass_Scout: strcopy(sClass, sizeof(sClass), "tf_weapon_bat");
+			case TFClass_Sniper: strcopy(sClass, sizeof(sClass), "tf_weapon_club");
+			case TFClass_Soldier: strcopy(sClass, sizeof(sClass), "tf_weapon_shovel");
+			case TFClass_DemoMan: strcopy(sClass, sizeof(sClass), "tf_weapon_bottle");
+			case TFClass_Engineer: strcopy(sClass, sizeof(sClass), "tf_weapon_wrench");
+			case TFClass_Pyro: strcopy(sClass, sizeof(sClass), "tf_weapon_fireaxe");
+			case TFClass_Heavy: strcopy(sClass, sizeof(sClass), "tf_weapon_fists");
+			case TFClass_Spy: strcopy(sClass, sizeof(sClass), "tf_weapon_knife");
+			case TFClass_Medic: strcopy(sClass, sizeof(sClass), "tf_weapon_bonesaw");
+		}
+	}
+	else if (StrContains(sClass, "shotgun", false) != -1)
+	{
+		switch (TF2_GetPlayerClass(client))
+		{
+			case TFClass_Soldier: strcopy(sClass, sizeof(sClass), "tf_weapon_shotgun_soldier");
+			case TFClass_Pyro: strcopy(sClass, sizeof(sClass), "tf_weapon_shotgun_pyro");
+			case TFClass_Heavy: strcopy(sClass, sizeof(sClass), "tf_weapon_shotgun_hwg");
+			case TFClass_Engineer: strcopy(sClass, sizeof(sClass), "tf_weapon_shotgun_primary");
+		}
+	}
+	
+	Handle item = TF2Items_CreateItem(PRESERVE_ATTRIBUTES | FORCE_GENERATION);	//Keep reserve attributes otherwise random issues will occur... including crashes.
+	TF2Items_SetClassname(item, sClass);
+	TF2Items_SetItemIndex(item, index);
+	TF2Items_SetQuality(item, view_as<int>(quality));
+	TF2Items_SetLevel(item, level);
+	
+	char sAttrs[32][32];
+	int count = ExplodeString(attributes, " ; ", sAttrs, 32, 32);
+	
+	if (count > 1)
+	{
+		TF2Items_SetNumAttributes(item, count / 2);
+		
+		int i2;
+		for (int i = 0; i < count; i += 2)
+		{
+			TF2Items_SetAttribute(item, i2, StringToInt(sAttrs[i]), StringToFloat(sAttrs[i + 1]));
+			i2++;
+		}
+	}
+	else
+		TF2Items_SetNumAttributes(item, 0);
+
+	int weapon = TF2Items_GiveNamedItem(client, item);
+	delete item;
+	
+	if (StrEqual(sClass, "tf_weapon_builder", false) || StrEqual(sClass, "tf_weapon_sapper", false))
+	{
+		SetEntProp(weapon, Prop_Send, "m_iObjectType", 3);
+		SetEntProp(weapon, Prop_Data, "m_iSubType", 3);
+		SetEntProp(weapon, Prop_Send, "m_aBuildableObjectTypes", 0, _, 0);
+		SetEntProp(weapon, Prop_Send, "m_aBuildableObjectTypes", 0, _, 1);
+		SetEntProp(weapon, Prop_Send, "m_aBuildableObjectTypes", 0, _, 2);
+		SetEntProp(weapon, Prop_Send, "m_aBuildableObjectTypes", 1, _, 3);
+	}
+	
+	if (StrContains(sClass, "tf_weapon_", false) == 0)
+		EquipPlayerWeapon(client, weapon);
+	
+	return weapon;
 }
 
 public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadcast)
@@ -572,7 +671,7 @@ void UpdateHud(int client)
 	{
 		case TFTeam_Red:
 		{
-			FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, g_MaxShots);
+			FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, GetMaxShots());
 		}
 
 		case TFTeam_Blue:
@@ -583,7 +682,17 @@ void UpdateHud(int client)
 	}
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s\nTotal Tasks: %i/%i", sMatchState, sTeamHud, g_TotalTasksEx, g_MaxTasks);
+	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s\nTotal Tasks: %i/%i", sMatchState, sTeamHud, g_TotalTasksEx, GetMaxTasks());
+}
+
+int GetMaxTasks()
+{
+	int tasks;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+			tasks += 5;
+	
+	return tasks;
 }
 
 void GetMatchStateName(char[] buffer, int size)
@@ -654,19 +763,22 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 
 	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) == TFTeam_Blue)
 	{
-		int task = g_NearTask[client];
+		for (int i = 0; i < g_RequiredTasks[client].Length; i++)
+		{
+			int task = g_RequiredTasks[client].Get(i);
 
-		if (task == -1)
-			return;
-		
-		int entity = FindEntityByName(g_Tasks[task].trigger, "trigger_multiple");
+			if (task == -1)
+				continue;
+			
+			int entity = FindEntityByName(g_Tasks[task].trigger, "trigger_multiple");
 
-		if (!IsValidEntity(entity))
-			return;
-		
-		float vecDestStart[3]; float vecDestEnd[3];
-		GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
-		Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 5.0, 5.0, 1, 5.0, {210, 0, 0, 120}, 0);
+			if (!IsValidEntity(entity))
+				continue;
+			
+			float vecDestStart[3]; float vecDestEnd[3];
+			GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
+			Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
+		}
 	}
 }
 
@@ -1195,7 +1307,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 		g_TotalShots++;
 
-		if (g_TotalShots >= g_MaxShots)
+		if (g_TotalShots >= GetMaxShots())
 		{
 			PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
 			TF2_ForceWin(TFTeam_Blue);
@@ -1211,6 +1323,16 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	}
 	
 	return MRES_Ignored;
+}
+
+int GetMaxShots()
+{
+	int shots;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+			shots += 2;
+	
+	return shots;
 }
 
 public Action OnClientCommand(int client, int args)
@@ -1234,6 +1356,14 @@ public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcas
 	FindConVar("mp_autoteambalance").IntValue = 0;
 	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
 	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+
+	bool available;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+			available = true;
+	
+	if (available)
+		g_MatchState = STATE_LOBBY;
 }
 
 public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
