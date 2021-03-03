@@ -448,6 +448,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 				if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
 					SetWeaponAmmo(client, weapon, 1);
 			
+			TF2Attrib_RemoveMoveSpeedPenalty(client);
 			TF2Attrib_ApplyMoveSpeedBonus(client, 0.8);
 		}
 
@@ -473,6 +474,9 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 
 			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
 
+			if (TF2_GetPlayerClass(client) == TFClass_Scout)
+				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.5);
+			
 			TF2Attrib_RemoveMoveSpeedBonus(client);
 		}
 	}
@@ -1492,5 +1496,17 @@ stock void TF2Attrib_ApplyMoveSpeedBonus(int client, float value)
 stock void TF2Attrib_RemoveMoveSpeedBonus(int client)
 {
 	TF2Attrib_RemoveByName(client, "move speed bonus");
+	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
+}
+
+stock void TF2Attrib_ApplyMoveSpeedPenalty(int client, float value)
+{
+	TF2Attrib_SetByName(client, "move speed penalty", 1.0 - value);
+	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
+}
+
+stock void TF2Attrib_RemoveMoveSpeedPenalty(int client)
+{
+	TF2Attrib_RemoveByName(client, "move speed penalty");
 	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
 }
