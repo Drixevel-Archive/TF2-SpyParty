@@ -1,11 +1,3 @@
-/*
-Force players to do tasks.
-Make it so you get 2-3 random tasks every 20-30 seconds
-1 sniper per 3 blues
-5 tasks per blue
-2 shots per sniper
-*/
-
 /*****************************/
 //Pragma
 #pragma semicolon 1
@@ -1174,16 +1166,22 @@ public Action Timer_PostStart(Handle timer)
 		
 		if (IsPlayerAlive(i))
 		{
-			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime());
+			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime() + 15000.0);
 
 			int weapon;
 			for (int slot = 0; slot < 3; slot++)
 			{
 				if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
 				{
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime());
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime());
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + 15000.0);
+					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime() + 15000.0);
 				}
+			}
+
+			if (TF2_GetClientTeam(i) == TFTeam_Red)
+			{
+				PrintCenterText(i, "You can take your 1st shot in 15 seconds...");
+				CreateTimer(15.0, Timer_ShotAllowed, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
 			}
 		}
 
@@ -1233,6 +1231,13 @@ public Action Timer_PostStart(Handle timer)
 	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Stop;
+}
+
+public Action Timer_ShotAllowed(Handle timer, any data)
+{
+	int client;
+	if ((client = GetClientOfUserId(data)) > 0 && IsClientInGame(client) && IsPlayerAlive(client) && TF2_GetClientTeam(client) == TFTeam_Red)
+		PrintCenterText(client, "You may take your 1st shot!");
 }
 
 int TF2_GetTeamClientCount(TFTeam team)
