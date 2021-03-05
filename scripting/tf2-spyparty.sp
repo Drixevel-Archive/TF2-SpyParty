@@ -66,6 +66,7 @@ int g_IsAimingAt[MAXPLAYERS + 1] = {-1, ...};
 Handle g_Hud;
 int g_MatchState = STATE_HIBERNATION;
 
+int g_LobbyTime;
 Handle g_LobbyTimer;
 
 int g_Countdown;
@@ -148,7 +149,7 @@ public void OnPluginStart()
 		
 		delete config;
 	}
-
+	
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i))
@@ -500,6 +501,9 @@ void OnSpawn(int client)
 		}
 	}
 
+	if (g_MatchState == STATE_HIBERNATION)
+		InitLobby();
+
 	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
 }
 
@@ -689,28 +693,51 @@ TFClassType GetRandomClass()
 	return classes[GetRandomInt(0, 6)];
 }
 
+void UpdateHudAll()
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && !IsFakeClient(i))
+			UpdateHud(i);
+}
+
 void UpdateHud(int client)
 {
 	char sMatchState[32];
 	GetMatchStateName(sMatchState, sizeof(sMatchState));
 
 	char sTeamHud[64];
-	switch (TF2_GetClientTeam(client))
+	if (g_MatchState == STATE_PLAYING)
 	{
-		case TFTeam_Red, TFTeam_Spectator:
+		switch (TF2_GetClientTeam(client))
 		{
-			FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, GetMaxShots());
-		}
+			case TFTeam_Red, TFTeam_Spectator:
+			{
+				FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, GetMaxShots());
+			}
 
-		case TFTeam_Blue:
-		{
-			int tasks = GetTasksCount(client);
-			FormatEx(sTeamHud, sizeof(sTeamHud), "Available Tasks: %i", tasks);
+			case TFTeam_Blue:
+			{
+				int tasks = GetTasksCount(client);
+				FormatEx(sTeamHud, sizeof(sTeamHud), "Available Tasks: %i", tasks);
+			}
 		}
 	}
 
+	char sTotalTasks[64];
+	if (g_MatchState == STATE_PLAYING)
+		FormatEx(sTotalTasks, sizeof(sTotalTasks), "\nTotal Tasks: %i/%i", g_TotalTasksEx, GetMaxTasks());
+	
+	int count;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+			count++;
+
+	char sWarning[32];
+	if (count < 3 && g_MatchState == STATE_LOBBY)
+		FormatEx(sWarning, sizeof(sWarning), "(Requires 3 players to start)");
+
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s\nTotal Tasks: %i/%i", sMatchState, sTeamHud, g_TotalTasksEx, GetMaxTasks());
+	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s%s%s", sMatchState, sTeamHud, sTotalTasks, sWarning);
 }
 
 int GetMaxTasks()
@@ -952,6 +979,9 @@ public Action Command_Start(int client, int args)
 
 void StartMatch()
 {
+	g_LobbyTime = 0;
+	StopTimer(g_LobbyTimer);
+
 	g_MatchState = STATE_COUNTDOWN;
 
 	g_Countdown = 5;
@@ -1397,6 +1427,9 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	g_Countdown = 0;
 	StopTimer(g_CountdownTimer);
 
+	g_LobbyTime = 0;
+	StopTimer(g_LobbyTimer);
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		g_IsSpy[i] = false;
@@ -1537,11 +1570,38 @@ void InitLobby()
 	CreateTF2Timer(120);
 
 	StopTimer(g_LobbyTimer);
-	g_LobbyTimer = CreateTimer(120.0, Timer_StartMatch, _, TIMER_FLAG_NO_MAPCHANGE);
+	g_LobbyTime = 120;
+	g_LobbyTimer = CreateTimer(1.0, Timer_StartMatch, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_StartMatch(Handle timer)
 {
+	int count;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+			count++;
+	
+	if (count < 3)
+	{
+		PauseTF2Timer();
+		UpdateHudAll();
+		return Plugin_Continue;
+	}
+	else
+	{
+		UnpauseTF2Timer();
+		UpdateHudAll();
+	}
+	
+	g_LobbyTime--;
+
+	if (g_LobbyTime > 0)
+		return Plugin_Continue;
+
+	g_LobbyTime = 0;
 	g_LobbyTimer = null;
+
 	StartMatch();
+
+	return Plugin_Stop;
 }
