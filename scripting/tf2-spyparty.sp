@@ -36,6 +36,8 @@ Make it so you get 2-3 random tasks every 20-30 seconds
 /*****************************/
 //ConVars
 
+ConVar convar_TeamBalance;
+
 /*****************************/
 //Globals
 
@@ -109,6 +111,8 @@ int g_SpyTask;
 int g_iLaserMaterial;
 int g_iHaloMaterial;
 
+int g_QueuePoints[MAXPLAYERS + 1];
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -122,7 +126,10 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
+	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
 
@@ -191,6 +198,11 @@ public void OnConfigsExecuted()
 	FindConVar("mp_scrambleteams_auto").IntValue = 0;
 }
 
+public void OnClientConnected(int client)
+{
+	g_QueuePoints[client] = 0;
+}
+
 public void OnClientPutInServer(int client)
 {
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
@@ -218,6 +230,8 @@ public void OnClientDisconnect_Post(int client)
 	g_NearTask[client] = -1;
 
 	g_GlowEnt[client] = -1;
+
+	g_QueuePoints[client] = 0;
 }
 
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -737,7 +751,7 @@ void UpdateHud(int client)
 		FormatEx(sWarning, sizeof(sWarning), "(Requires 3 players to start)");
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s\n%s%s%s", sMatchState, sTeamHud, sTotalTasks, sWarning);
+	ShowSyncHudText(client, g_Hud, "Match State: %s (Queue Points: %i)\n%s%s%s", sMatchState, g_QueuePoints[client], sTeamHud, sTotalTasks, sWarning);
 }
 
 int GetMaxTasks()
@@ -979,6 +993,10 @@ public Action Command_Start(int client, int args)
 
 void StartMatch()
 {
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+			TF2_ChangeClientTeam(i, TFTeam_Blue);
+	
 	g_LobbyTime = 0;
 	StopTimer(g_LobbyTimer);
 
@@ -1007,6 +1025,41 @@ public Action Timer_CountdownTick(Handle timer)
 
 	g_TotalTasksEx = 0;
 	g_TotalShots = 0;
+	
+	int count = TF2_GetTeamClientCount(TFTeam_Blue);
+	int total = TF2_GetTeamClientCount(TFTeam_Red);
+	int balance = RoundToFloor(count * convar_TeamBalance.FloatValue);
+
+	//PrintToChatAll("count: %i balance: %i - total: %i", count, balance, total);
+
+	if (total < balance)
+	{
+		balance -= total;
+		//PrintToChatAll("moving %i...", balance);
+		
+		int moved; int failsafe; int client;
+		while (moved < balance && failsafe < MaxClients)
+		{
+			if ((client = FindAssassinToMove()) != -1)
+			{
+				TF2_ChangeClientTeam(client, TFTeam_Red);
+				TF2_RespawnPlayer(client);
+				g_QueuePoints[client] = 0;
+				moved++;
+			}
+			else
+				failsafe++;
+		}
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
+		{
+			g_QueuePoints[i]++;
+
+			if (!IsPlayerAlive(i))
+				TF2_RespawnPlayer(i);
+		}
 
 	int spy = GetRandomClient();
 
@@ -1088,6 +1141,50 @@ public Action Timer_CountdownTick(Handle timer)
 	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Stop;
+}
+
+int TF2_GetTeamClientCount(TFTeam team)
+{
+	int value = 0;
+
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && TF2_GetClientTeam(i) == team)
+			value++;
+
+	return value;
+}
+
+int FindAssassinToMove()
+{
+	ArrayList queue = new ArrayList();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue)
+			continue;
+		
+		queue.Push(i);
+	}
+
+	if (queue.Length < 1)
+	{
+		delete queue;
+		return -1;
+	}
+
+	SortADTArrayCustom(queue, OnSortQueue);
+	int client = queue.Get(0);
+	delete queue;
+
+	return client;
+}
+
+public int OnSortQueue(int index1, int index2, Handle array, Handle hndl)
+{
+	int client1 = GetArrayCell(array, index1);
+	int client2 = GetArrayCell(array, index2);
+	
+	return g_QueuePoints[client2] - g_QueuePoints[client1];
 }
 
 public Action Timer_GiveTasksTick(Handle timer)
