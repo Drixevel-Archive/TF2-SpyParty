@@ -39,6 +39,8 @@ Make it so you get 2-3 random tasks every 20-30 seconds
 ConVar convar_TeamBalance;
 ConVar convar_GivenTasks;
 
+ConVar convar_AllTalk;
+
 /*****************************/
 //Globals
 
@@ -130,6 +132,8 @@ public void OnPluginStart()
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
 
+	convar_AllTalk = FindConVar("sv_alltalk");
+
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
@@ -198,6 +202,8 @@ public void OnConfigsExecuted()
 	FindConVar("mp_autoteambalance").IntValue = 0;
 	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
 	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+
+	convar_AllTalk.BoolValue = true;
 }
 
 public void OnClientConnected(int client)
@@ -998,6 +1004,8 @@ public Action Command_Start(int client, int args)
 
 void StartMatch()
 {
+	convar_AllTalk.BoolValue = false;
+
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 			TF2_ChangeClientTeam(i, TFTeam_Blue);
@@ -1536,6 +1544,7 @@ public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcas
 
 public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+	convar_AllTalk.BoolValue = true;
 	g_MatchState = STATE_HIBERNATION;
 
 	g_Countdown = 0;
@@ -1680,6 +1689,8 @@ stock void TF2Attrib_RemoveMoveSpeedPenalty(int client)
 
 void InitLobby()
 {
+	convar_AllTalk.BoolValue = true;
+
 	g_MatchState = STATE_LOBBY;
 	CreateTF2Timer(120);
 
