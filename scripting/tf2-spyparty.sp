@@ -45,6 +45,10 @@ ConVar g_cvarLaserRED;
 ConVar g_cvarLaserBLU;
 
 ConVar convar_AllTalk;
+ConVar convar_RespawnWaveTime;
+ConVar convar_AutoTeamBalance;
+ConVar convar_TeamBalanceLimit;
+ConVar convar_AutoScramble;
 
 /*****************************/
 //Globals
@@ -147,6 +151,10 @@ public void OnPluginStart()
 	g_cvarLaserBLU = CreateConVar("sm_spyparty_laser_color_blu", "0 0 255", "Sniper laser color BLUE");
 
 	convar_AllTalk = FindConVar("sv_alltalk");
+	convar_RespawnWaveTime = FindConVar("mp_respawnwavetime");
+	convar_AutoTeamBalance = FindConVar("mp_autoteambalance");
+	convar_TeamBalanceLimit = FindConVar("mp_teams_unbalance_limit");
+	convar_AutoScramble = FindConVar("mp_scrambleteams_auto");
 
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
@@ -196,10 +204,10 @@ public void OnPluginStart()
 	
 	ParseTasks();
 
-	FindConVar("mp_respawnwavetime").IntValue = 10;
-	FindConVar("mp_autoteambalance").IntValue = 0;
-	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
-	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+	convar_RespawnWaveTime.IntValue = 10;
+	convar_AutoTeamBalance.IntValue = 0;
+	convar_TeamBalanceLimit.IntValue = 0;
+	convar_AutoScramble.IntValue = 0;
 }
 
 public Action Command_Spy(int client, int args)
@@ -213,10 +221,10 @@ public Action Command_Spy(int client, int args)
 
 public void OnConfigsExecuted()
 {
-	FindConVar("mp_respawnwavetime").IntValue = 10;
-	FindConVar("mp_autoteambalance").IntValue = 0;
-	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
-	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+	convar_RespawnWaveTime.IntValue = 10;
+	convar_AutoTeamBalance.IntValue = 0;
+	convar_TeamBalanceLimit.IntValue = 0;
+	convar_AutoScramble.IntValue = 0;
 
 	convar_AllTalk.BoolValue = true;
 }
@@ -420,7 +428,7 @@ public void OnPluginEnd()
 	}
 
 	PauseTF2Timer();
-	FindConVar("mp_respawnwavetime").IntValue = 10;
+	convar_RespawnWaveTime.IntValue = 10;
 }
 
 public void OnMapStart()
@@ -434,7 +442,7 @@ public void OnMapStart()
 	g_iLaserMaterial = PrecacheModel("materials/sprites/laserbeam.vmt");
 	g_iHaloMaterial = PrecacheModel("materials/sprites/halo01.vmt");
 
-	FindConVar("mp_respawnwavetime").IntValue = 10;
+	convar_RespawnWaveTime.IntValue = 10;
 }
 
 public void OnMapEnd()
@@ -445,7 +453,7 @@ public void OnMapEnd()
 	g_CountdownTimer = null;
 	g_GiveTasksTimer = null;
 
-	FindConVar("mp_respawnwavetime").IntValue = 10;
+	convar_RespawnWaveTime.IntValue = 10;
 }
 
 public void Event_OnPlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
@@ -1201,7 +1209,7 @@ public Action Timer_PostStart(Handle timer)
 		}
 	}
 
-	FindConVar("mp_respawnwavetime").IntValue = 99999;
+	convar_RespawnWaveTime.IntValue = 99999;
 	CreateTF2Timer(900);
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
@@ -1774,10 +1782,10 @@ public Action OnClientCommand(int client, int args)
 
 public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	FindConVar("mp_respawnwavetime").IntValue = 10;
-	FindConVar("mp_autoteambalance").IntValue = 0;
-	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
-	FindConVar("mp_scrambleteams_auto").IntValue = 0;
+	convar_RespawnWaveTime.IntValue = 10;
+	convar_AutoTeamBalance.IntValue = 0;
+	convar_TeamBalanceLimit.IntValue = 0;
+	convar_AutoScramble.IntValue = 0;
 
 	bool available;
 	for (int i = 1; i <= MaxClients; i++)
@@ -1834,7 +1842,7 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	g_GiveTasks = 0;
 	StopTimer(g_GiveTasksTimer);
 
-	FindConVar("mp_respawnwavetime").IntValue = 10;
+	convar_RespawnWaveTime.IntValue = 10;
 }
 
 int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255, 255})
