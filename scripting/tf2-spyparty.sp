@@ -452,6 +452,7 @@ public void Event_OnPlayerChangeClass(Event event, const char[] name, bool dontB
 		return;
 	
 	UpdateHud(client);
+	KillEyeProp(client);
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -481,6 +482,8 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 
 void OnSpawn(int client)
 {
+	KillEyeProp(client);
+	
 	switch (TF2_GetClientTeam(client))
 	{
 		case TFTeam_Red:
@@ -638,6 +641,8 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	int client;
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
+	
+	KillEyeProp(client);
 	
 	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
 	{
@@ -1484,22 +1489,25 @@ public void OnGameFrame()
 public void TF2_OnConditionRemoved(int client, TFCond condition)
 {
 	if (TF2_GetPlayerClass(client) == TFClass_Sniper && condition == TFCond_Zoomed)
+		KillEyeProp(client);
+}
+
+void KillEyeProp(int client)
+{
+	int iEyeProp = EntRefToEntIndex(g_iEyeProp[client]);
+	
+	if (iEyeProp != INVALID_ENT_REFERENCE)
 	{
-		int iEyeProp = EntRefToEntIndex(g_iEyeProp[client]);
+		AcceptEntityInput(iEyeProp, "ClearParent");
+		AcceptEntityInput(iEyeProp, "Stop");
 		
-		if (iEyeProp != INVALID_ENT_REFERENCE)
-		{
-			AcceptEntityInput(iEyeProp, "ClearParent");
-			AcceptEntityInput(iEyeProp, "Stop");
-			
-			DispatchKeyValue(iEyeProp, "origin", "99999 99999 99999");
-			
-			SetVariantString("OnUser1 !self:kill::0.1:1");
-			AcceptEntityInput(iEyeProp, "AddOutput");
-			AcceptEntityInput(iEyeProp, "FireUser1");
-			
-			g_iEyeProp[client] = INVALID_ENT_REFERENCE;
-		}
+		DispatchKeyValue(iEyeProp, "origin", "99999 99999 99999");
+		
+		SetVariantString("OnUser1 !self:kill::0.1:1");
+		AcceptEntityInput(iEyeProp, "AddOutput");
+		AcceptEntityInput(iEyeProp, "FireUser1");
+		
+		g_iEyeProp[client] = INVALID_ENT_REFERENCE;
 	}
 }
 
