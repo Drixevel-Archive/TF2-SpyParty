@@ -66,6 +66,8 @@ int g_IsAimingAt[MAXPLAYERS + 1] = {-1, ...};
 Handle g_Hud;
 int g_MatchState = STATE_HIBERNATION;
 
+Handle g_LobbyTimer;
+
 int g_Countdown;
 Handle g_CountdownTimer;
 
@@ -124,6 +126,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
+	HookEvent("player_changeclass", Event_OnPlayerChangeClass);
 	HookEvent("player_death", Event_OnPlayerDeath);
 	HookEvent("teamplay_round_start", Event_OnRoundStart);
 	HookEvent("teamplay_round_win", Event_OnRoundEnd);
@@ -146,7 +149,6 @@ public void OnPluginStart()
 		delete config;
 	}
 
-	bool available;
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i))
@@ -155,14 +157,8 @@ public void OnPluginStart()
 		OnClientPutInServer(i);
 		
 		if (IsPlayerAlive(i))
-		{
-			TF2_RespawnPlayer(i);
-			available = true;
-		}
+			OnSpawn(i);
 	}
-
-	if (available)
-		g_MatchState = STATE_LOBBY;
 
 	int entity = -1; char classname[64];
 	while ((entity = FindEntityByClassname(entity, "*")) != -1)
@@ -396,15 +392,29 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_MatchState = STATE_HIBERNATION;
+
+	g_LobbyTimer = null;
 	g_CountdownTimer = null;
 	g_GiveTasksTimer = null;
 
 	FindConVar("mp_respawnwavetime").IntValue = 10;
 }
 
+public void Event_OnPlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
+{
+	int client;
+	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
+		return;
+	
+	UpdateHud(client);
+}
+
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	CreateTimer(0.2, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+
+	if (g_MatchState == STATE_HIBERNATION)
+		InitLobby();
 }
 
 public Action Timer_DelaySpawn(Handle timer, any data)
@@ -419,6 +429,13 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 		g_GlowEnt[client] = -1;
 	}
 	
+	OnSpawn(client);
+
+	return Plugin_Stop;
+}
+
+void OnSpawn(int client)
+{
 	switch (TF2_GetClientTeam(client))
 	{
 		case TFTeam_Red:
@@ -476,14 +493,21 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 
 			if (TF2_GetPlayerClass(client) == TFClass_Scout)
 				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.5);
+			else
+				TF2Attrib_RemoveMoveSpeedPenalty(client);
 			
 			TF2Attrib_RemoveMoveSpeedBonus(client);
 		}
 	}
 
-	UpdateHud(client);
+	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
+}
 
-	return Plugin_Stop;
+public Action Timer_Hud(Handle timer, any data)
+{
+	int client;
+	if ((client = GetClientOfUserId(data)) > 0)
+		UpdateHud(client);
 }
 
 stock int TF2_GiveItem(int client, char[] classname, int index, TF2Quality quality = TF2Quality_Normal, int level = 0, const char[] attributes = "")
@@ -673,7 +697,7 @@ void UpdateHud(int client)
 	char sTeamHud[64];
 	switch (TF2_GetClientTeam(client))
 	{
-		case TFTeam_Red:
+		case TFTeam_Red, TFTeam_Spectator:
 		{
 			FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, GetMaxShots());
 		}
@@ -1352,10 +1376,6 @@ public Action OnClientCommand(int client, int args)
 
 public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && !IsFakeClient(i))
-			UpdateHud(i);
-	
 	FindConVar("mp_respawnwavetime").IntValue = 10;
 	FindConVar("mp_autoteambalance").IntValue = 0;
 	FindConVar("mp_teams_unbalance_limit").IntValue = 0;
@@ -1509,4 +1529,19 @@ stock void TF2Attrib_RemoveMoveSpeedPenalty(int client)
 {
 	TF2Attrib_RemoveByName(client, "move speed penalty");
 	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
+}
+
+void InitLobby()
+{
+	g_MatchState = STATE_LOBBY;
+	CreateTF2Timer(120);
+
+	StopTimer(g_LobbyTimer);
+	g_LobbyTimer = CreateTimer(120.0, Timer_StartMatch, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_StartMatch(Handle timer)
+{
+	g_LobbyTimer = null;
+	StartMatch();
 }
