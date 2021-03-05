@@ -267,6 +267,9 @@ void AddTask(int client, int task)
 	if (g_IsSpy[client] && GetRandomInt(0, 10) > 2)
 		task = g_SpyTask;
 	
+	if (g_RequiredTasks[client].FindValue(task) != -1)
+		task = GetRandomInt(0, g_TotalTasks - 1);
+	
 	g_RequiredTasks[client].Push(task);
 	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
 	UpdateHud(client);
