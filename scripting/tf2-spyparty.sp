@@ -130,6 +130,11 @@ int g_iEyeProp[MAXPLAYERS + 1];
 int g_iSniperDot[MAXPLAYERS + 1];
 int g_iDotController[MAXPLAYERS + 1];
 
+float g_TaskTimer[MAXPLAYERS + 1];
+Handle g_DoingTask[MAXPLAYERS + 1];
+
+bool g_IsMarked[MAXPLAYERS + 1];
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -262,6 +267,7 @@ public void OnClientDisconnect_Post(int client)
 {
 	g_IsSpy[client] = false;
 	g_IsBenefactor[client] = false;
+	g_IsMarked[client] = false;
 
 	g_BenefactorNoises[client] = 0;
 
@@ -566,6 +572,9 @@ void OnSpawn(int client)
 			TF2Attrib_RemoveMoveSpeedBonus(client);
 		}
 	}
+
+	if (!IsPlayerAlive(client))
+		TF2_RespawnPlayer(client);
 
 	if (g_MatchState == STATE_HIBERNATION)
 		InitLobby();
@@ -878,7 +887,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 						
 						GetClientAbsOrigin(i, origin2);
 
-						if (GetVectorDistance(origin, origin2) >= 100.0)
+						if (GetVectorDistance(origin, origin2) >= 250.0)
 						{
 							if (g_IsAimingAt[client] == i)
 								g_IsAimingAt[client] = -1;
@@ -891,6 +900,8 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 					}
 				}
 			}
+			else
+				g_IsAimingAt[client] = -1;
 		}
 		else
 		{
@@ -1729,8 +1740,7 @@ int GetTaskByName(const char[] task)
 	
 	return -1;
 }
-float g_TaskTimer[MAXPLAYERS + 1];
-Handle g_DoingTask[MAXPLAYERS + 1];
+
 public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 {
 	char sVoice[32];
@@ -1739,7 +1749,7 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	char sVoice2[32];
 	GetCmdArg(2, sVoice2, sizeof(sVoice2));
 	
-	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false))
+	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false) || g_MatchState != STATE_PLAYING)
 		return Plugin_Continue;
 	
 	if (TF2_GetClientTeam(client) == TFTeam_Blue)
@@ -1761,8 +1771,54 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 
 		return Plugin_Stop;
 	}
+	else if (TF2_GetClientTeam(client) == TFTeam_Red)
+	{
+		int target = GetClientAimTarget(client, true);
+
+		if (target == -1 || g_IsMarked[target])
+			return Plugin_Stop;
+		
+		SpeakResponseConcept(client, "TLK_PLAYER_POSITIVE");
+		SpeakResponseConcept(target, "TLK_PLAYER_NEGATIVE");
+		
+		if (IsValidEntity(g_GlowEnt[target]))
+		{
+			int color[4];
+			color[0] = 0;
+			color[1] = 0;
+			color[2] = 255;
+			color[3] = 255;
+			
+			SetVariantColor(color);
+			AcceptEntityInput(g_GlowEnt[target], "SetGlowColor");
+
+			g_IsMarked[target] = true;
+			CreateTimer(30.0, Timer_ResetColor, target);
+		}
+
+		return Plugin_Stop;
+	}
 
 	return Plugin_Continue;
+}
+
+public Action Timer_ResetColor(Handle timer, any data)
+{
+	int client = data;
+
+	if (IsValidEntity(g_GlowEnt[client]))
+	{
+		int color[4];
+		color[0] = 255;
+		color[1] = 255;
+		color[2] = 255;
+		color[3] = 255;
+		
+		SetVariantColor(color);
+		AcceptEntityInput(g_GlowEnt[client], "SetGlowColor");
+
+		g_IsMarked[client] = false;
+	}
 }
 
 public Action Timer_DoingTask(Handle timer, any data)
@@ -1806,6 +1862,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 		}
 
 		g_TotalShots++;
+		SpeakResponseConcept(client, "TLK_FIREWEAPON");
 
 		if (g_TotalShots >= GetMaxShots())
 		{
@@ -2121,4 +2178,35 @@ stock bool TF2_ChangeClientTeam_Alive(int client, TFTeam team)
 	SetEntProp(client, Prop_Send, "m_lifeState", lifestate);
 	
 	return true;
+}
+
+stock void SpeakResponseConcept(int client, const char[] concept, const char[] context = "", const char[] class = "")
+{
+	bool hascontext;
+
+	//For class specific context basically.
+	if (strlen(context) > 0)
+	{
+		SetVariantString(context);
+		AcceptEntityInput(client, "AddContext");
+
+		hascontext = true;
+	}
+
+	//dominations require you add more context to them for certain things.
+	if (strlen(class) > 0)
+	{
+		char sClass[64];
+		FormatEx(sClass, sizeof(sClass), "victimclass:%s", class);
+		SetVariantString(sClass);
+		AcceptEntityInput(client, "AddContext");
+
+		hascontext = true;
+	}
+
+	SetVariantString(concept);
+	AcceptEntityInput(client, "SpeakResponseConcept");
+
+	if (hascontext)
+		AcceptEntityInput(client, "ClearContext");
 }
