@@ -39,6 +39,11 @@ Make it so you get 2-3 random tasks every 20-30 seconds
 ConVar convar_TeamBalance;
 ConVar convar_GivenTasks;
 
+ConVar g_cvarLaserEnabled;
+ConVar g_cvarLaserRandom;
+ConVar g_cvarLaserRED;
+ConVar g_cvarLaserBLU;
+
 ConVar convar_AllTalk;
 
 /*****************************/
@@ -116,6 +121,10 @@ int g_iHaloMaterial;
 
 int g_QueuePoints[MAXPLAYERS + 1];
 
+int g_iEyeProp[MAXPLAYERS + 1];
+int g_iSniperDot[MAXPLAYERS + 1];
+int g_iDotController[MAXPLAYERS + 1];
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -131,6 +140,11 @@ public void OnPluginStart()
 {
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
+
+	g_cvarLaserEnabled = CreateConVar("sm_spyparty_laser_enabled", "1", "Sniper rifles emit lasers", _, true, 0.0, true, 1.0);
+	g_cvarLaserRandom = CreateConVar("sm_spyparty_laser_random_color", "0", "Sniper laser use random color?", _, true, 0.0, true, 1.0);
+	g_cvarLaserRED = CreateConVar("sm_spyparty_laser_color_red", "255 0 0", "Sniper laser color RED");
+	g_cvarLaserBLU = CreateConVar("sm_spyparty_laser_color_blu", "0 0 255", "Sniper laser color BLUE");
 
 	convar_AllTalk = FindConVar("sv_alltalk");
 
@@ -213,6 +227,10 @@ public void OnClientConnected(int client)
 
 public void OnClientPutInServer(int client)
 {
+	g_iEyeProp[client] = INVALID_ENT_REFERENCE;
+	g_iSniperDot[client] = INVALID_ENT_REFERENCE;
+	g_iDotController[client] = INVALID_ENT_REFERENCE;
+
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 
 	delete g_RequiredTasks[client];
@@ -1331,6 +1349,157 @@ public void OnEntityCreated(int entity, const char[] classname)
 
 	if (StrContains(classname, "ammo", false) != -1)
 		SDKHook(entity, SDKHook_Spawn, OnBlockSpawn);
+	
+	if (StrEqual(classname, "env_sniperdot") && g_cvarLaserEnabled.BoolValue)
+		SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
+}
+
+public Action SpawnPost(int entity)
+{
+	RequestFrame(SpawnPostPost, entity);	
+}
+
+public void SpawnPostPost(int ent)
+{
+	if (IsValidEntity(ent))
+	{
+		int client = GetEntPropEnt(ent, Prop_Send, "m_hOwnerEntity");
+		
+		if (client > 0 && client <= MaxClients && IsClientInGame(client))
+		{
+			///////////////////////////////////////////////
+			float rgb[3]; 
+			if (g_cvarLaserRandom.BoolValue)
+			{
+				rgb[0] = GetRandomFloat(0.0, 255.0);
+				rgb[1] = GetRandomFloat(0.0, 255.0);
+				rgb[2] = GetRandomFloat(0.0, 255.0);
+			}
+			else
+			{
+				char strrgb[PLATFORM_MAX_PATH];
+			
+				switch(TF2_GetClientTeam(client))
+				{
+					case TFTeam_Red:  g_cvarLaserRED.GetString(strrgb, PLATFORM_MAX_PATH);
+					case TFTeam_Blue: g_cvarLaserBLU.GetString(strrgb, PLATFORM_MAX_PATH);
+				}
+				
+				char rgbExploded[3][16];
+				ExplodeString(strrgb, " ", rgbExploded, sizeof(rgbExploded), sizeof(rgbExploded[]));
+				
+				rgb[0] = StringToFloat(rgbExploded[0]);
+				rgb[1] = StringToFloat(rgbExploded[1]);
+				rgb[2] = StringToFloat(rgbExploded[2]);
+			}
+			
+			char name[PLATFORM_MAX_PATH];
+			Format(name, PLATFORM_MAX_PATH, "laser_%i", ent);
+		
+			//color controls the color and is for color only.//
+			int color = CreateEntityByName("info_particle_system");
+			DispatchKeyValue(color, "targetname", name);
+			DispatchKeyValueVector(color, "origin", rgb);
+			DispatchSpawn(color);
+			
+			//Start of beam -> parented to client.
+			int a = CreateEntityByName("info_particle_system");
+			DispatchKeyValue(a, "effect_name", "laser_sight_beam");
+			DispatchKeyValue(a, "cpoint2", name);
+			DispatchSpawn(a);
+			
+			SetVariantString("!activator");
+			AcceptEntityInput(a, "SetParent", client);
+			
+			SetVariantString("eyeglow_R");
+			AcceptEntityInput(a, "SetParentAttachment", client);
+			
+			//Dot controller, set as controlpointent on beam
+			int dotController = CreateEntityByName("info_particle_system");
+			
+			float dotPos[3];
+			GetEntPropVector(ent, Prop_Send, "m_vecOrigin", dotPos);
+			
+			DispatchKeyValueVector(dotController, "origin", dotPos);
+			DispatchSpawn(dotController);
+			
+			//Start of beam -> control point ent set to env_sniperdot
+			SetEntPropEnt(a, Prop_Data, "m_hControlPointEnts", dotController);
+			SetEntPropEnt(a, Prop_Send, "m_hControlPointEnts", dotController);
+			
+			ActivateEntity(a);
+			AcceptEntityInput(a, "Start");
+			
+			SetVariantString("OnUser1 !self:kill::0.1:1");
+			AcceptEntityInput(color, "AddOutput");
+			AcceptEntityInput(color, "FireUser1");
+			
+			g_iEyeProp[client]   = EntIndexToEntRef(a);
+			g_iSniperDot[client] = EntIndexToEntRef(ent);
+			g_iDotController[client] = EntIndexToEntRef(dotController);
+			
+			//Hide original dot.
+			SDKHook(ent, SDKHook_SetTransmit, OnDotTransmit);
+		}
+	}
+}
+
+public Action OnDotTransmit(int entity, int client)
+{
+	return Plugin_Handled;
+}
+
+public void OnGameFrame()
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i))
+			continue;
+			
+		int env_sniperdot = EntRefToEntIndex(g_iSniperDot[i]);
+		int dotController = EntRefToEntIndex(g_iDotController[i]);
+
+		if (env_sniperdot > 0 && dotController > 0)
+		{
+			float dotPos[3]; GetEntPropVector(env_sniperdot, Prop_Send, "m_vecOrigin", dotPos);
+			DispatchKeyValueVector(dotController, "origin", dotPos);
+		}
+		else
+		{
+			if (env_sniperdot <= 0 && dotController > 0)
+			{
+				DispatchKeyValue(dotController, "origin", "99999 99999 99999");
+				
+				SetVariantString("OnUser1 !self:kill::0.1:1");
+				AcceptEntityInput(dotController, "AddOutput");
+				AcceptEntityInput(dotController, "FireUser1");
+				
+				g_iDotController[i] = INVALID_ENT_REFERENCE;
+			}
+		}
+	}
+}
+
+public void TF2_OnConditionRemoved(int client, TFCond condition)
+{
+	if (TF2_GetPlayerClass(client) == TFClass_Sniper && condition == TFCond_Zoomed)
+	{
+		int iEyeProp = EntRefToEntIndex(g_iEyeProp[client]);
+		
+		if (iEyeProp != INVALID_ENT_REFERENCE)
+		{
+			AcceptEntityInput(iEyeProp, "ClearParent");
+			AcceptEntityInput(iEyeProp, "Stop");
+			
+			DispatchKeyValue(iEyeProp, "origin", "99999 99999 99999");
+			
+			SetVariantString("OnUser1 !self:kill::0.1:1");
+			AcceptEntityInput(iEyeProp, "AddOutput");
+			AcceptEntityInput(iEyeProp, "FireUser1");
+			
+			g_iEyeProp[client] = INVALID_ENT_REFERENCE;
+		}
+	}
 }
 
 public Action OnBlockSpawn(int entity)
