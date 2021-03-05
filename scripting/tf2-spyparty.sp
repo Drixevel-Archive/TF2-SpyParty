@@ -1,3 +1,9 @@
+/*
+Benefactors
+Change Class Stations
+Lockdown Walls
+*/
+
 /*****************************/
 //Pragma
 #pragma semicolon 1
@@ -79,6 +85,9 @@ int g_Countdown;
 Handle g_CountdownTimer;
 
 bool g_IsSpy[MAXPLAYERS + 1];
+bool g_IsBenefactor[MAXPLAYERS + 1];
+
+int g_BenefactorNoises[MAXPLAYERS + 1];
 
 int g_LastRefilled[MAXPLAYERS + 1];
 
@@ -137,7 +146,7 @@ public void OnPluginStart()
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
 
-	g_cvarLaserEnabled = CreateConVar("sm_spyparty_laser_enabled", "1", "Sniper rifles emit lasers", _, true, 0.0, true, 1.0);
+	g_cvarLaserEnabled = CreateConVar("sm_spyparty_laser_enabled", "0", "Sniper rifles emit lasers", _, true, 0.0, true, 1.0);
 	g_cvarLaserRandom = CreateConVar("sm_spyparty_laser_random_color", "0", "Sniper laser use random color?", _, true, 0.0, true, 1.0);
 	g_cvarLaserRED = CreateConVar("sm_spyparty_laser_color_red", "255 0 0", "Sniper laser color RED");
 	g_cvarLaserBLU = CreateConVar("sm_spyparty_laser_color_blu", "0 0 255", "Sniper laser color BLUE");
@@ -250,6 +259,9 @@ public void OnClientDisconnect(int client)
 public void OnClientDisconnect_Post(int client)
 {
 	g_IsSpy[client] = false;
+	g_IsBenefactor[client] = false;
+
+	g_BenefactorNoises[client] = 0;
 
 	g_LastRefilled[client] = 0;
 
@@ -678,6 +690,11 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		PrintToChatAll("%N was a spy and has died!", client);
 		TF2_SetPlayerClass(client, TFClass_Spy);
 		g_IsSpy[client] = false;
+	}
+	else if (g_IsBenefactor[client])
+	{
+		PrintToChatAll("%N was a benefactor and has died!", client);
+		g_IsBenefactor[client] = false;
 	}
 	else
 	{
@@ -1155,6 +1172,27 @@ public Action Timer_PostStart(Handle timer)
 		SetVariantColor(color);
 		AcceptEntityInput(g_GlowEnt[spy], "SetGlowColor");
 	}
+
+	int benefactor = FindBenefactor();
+
+	if (benefactor != -1)
+	{
+		g_IsBenefactor[benefactor] = true;
+		PrintCenterText(benefactor, "YOU ARE A BENEFACTOR!");
+		EmitSoundToClient(benefactor, "coach/coach_look_here.wav");
+
+		if (IsValidEntity(g_GlowEnt[benefactor]))
+		{
+			int color[4];
+			color[0] = 0;
+			color[1] = 0;
+			color[2] = 255;
+			color[3] = 255;
+			
+			SetVariantColor(color);
+			AcceptEntityInput(g_GlowEnt[benefactor], "SetGlowColor");
+		}
+	}
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -1192,6 +1230,7 @@ public Action Timer_PostStart(Handle timer)
 			case TFTeam_Red:
 			{
 				PrintToChat(i, "Hunt out the spy and assassinate them! You have a limited amount of chances, use them wisely!");
+				PrintToChat(i, "Keep in mind that benefactors can fake you out!");
 
 				int weapon;
 				for (int slot = 0; slot < 3; slot++)
@@ -1202,6 +1241,7 @@ public Action Timer_PostStart(Handle timer)
 			case TFTeam_Blue:
 			{
 				PrintToChat(i, "%N has been chosen as the Spy, protect them at all costs by doing basic tasks!", spy);
+				PrintToChat(i, "%N is a benefactor!", benefactor);
 			}
 		}
 	}
@@ -1366,6 +1406,25 @@ int FindSpy()
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue)
+			continue;
+
+		clients[amount++] = i;
+	}
+
+	if (amount == 0)
+		return -1;
+
+	return clients[GetRandomInt(0, amount - 1)];
+}
+
+int FindBenefactor()
+{
+	int[] clients = new int[MaxClients];
+	int amount;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue || g_IsSpy[i])
 			continue;
 
 		clients[amount++] = i;
@@ -1681,11 +1740,22 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false))
 		return Plugin_Continue;
 	
-	if (TF2_GetClientTeam(client) == TFTeam_Blue && g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
+	if (TF2_GetClientTeam(client) == TFTeam_Blue)
 	{
-		g_TaskTimer[client] = 10.0;
-		StopTimer(g_DoingTask[client]);
-		g_DoingTask[client] = CreateTimer(0.1, Timer_DoingTask, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+		if (g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
+		{
+			g_TaskTimer[client] = 10.0;
+			StopTimer(g_DoingTask[client]);
+			g_DoingTask[client] = CreateTimer(0.1, Timer_DoingTask, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+		}
+
+		int time = GetTime();
+
+		if (g_IsBenefactor[client] && g_BenefactorNoises[client] <= time)
+		{
+			g_BenefactorNoises[client] = time + 10;
+			EmitSoundToAll("coach/coach_look_here.wav");
+		}
 
 		return Plugin_Stop;
 	}
@@ -1778,7 +1848,7 @@ public Action OnClientCommand(int client, int args)
 	char sCommand[32];
 	GetCmdArg(0, sCommand, sizeof(sCommand));
 
-	if (g_MatchState == STATE_PLAYING && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
+	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
 	
 	return Plugin_Continue;
@@ -1814,6 +1884,7 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		g_IsSpy[i] = false;
+		g_IsBenefactor[i] = false;
 
 		g_LastRefilled[i] = 0;
 
