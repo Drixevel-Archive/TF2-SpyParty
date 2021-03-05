@@ -1007,6 +1007,8 @@ void StartMatch()
 
 	g_MatchState = STATE_COUNTDOWN;
 
+	CreateTF2Timer(5);
+
 	g_Countdown = 5;
 	StopTimer(g_CountdownTimer);
 	g_CountdownTimer = CreateTimer(1.0, Timer_CountdownTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -1058,6 +1060,7 @@ public Action Timer_CountdownTick(Handle timer)
 	}
 
 	for (int i = 1; i <= MaxClients; i++)
+	{
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
 		{
 			g_QueuePoints[i]++;
@@ -1065,8 +1068,15 @@ public Action Timer_CountdownTick(Handle timer)
 			if (!IsPlayerAlive(i))
 				TF2_RespawnPlayer(i);
 		}
+	}
 
-	int spy = GetRandomClient();
+	CreateTimer(0.2, Timer_PostStart, _, TIMER_FLAG_NO_MAPCHANGE);
+	return Plugin_Stop;
+}
+
+public Action Timer_PostStart(Handle timer)
+{
+	int spy = FindSpy();
 
 	if (spy == -1)
 	{
@@ -1268,14 +1278,14 @@ void SetWeaponAmmo(int client, int weapon, int ammo)
 		SetEntProp(client, Prop_Data, "m_iAmmo", ammo, _, iAmmoType);
 }
 
-int GetRandomClient()
+int FindSpy()
 {
 	int[] clients = new int[MaxClients];
 	int amount;
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || IsFakeClient(i) || GetClientTeam(i) != 3)
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || IsFakeClient(i) || TF2_GetClientTeam(i) != TFTeam_Blue)
 			continue;
 
 		clients[amount++] = i;
