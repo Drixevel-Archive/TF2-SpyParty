@@ -152,6 +152,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
+	RegAdminCmd("sm_setqueuepoints", Command_SetQueuePoints, ADMFLAG_ROOT, "Set your own or somebody else's queue points.");
 
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_changeclass", Event_OnPlayerChangeClass);
@@ -1314,7 +1315,7 @@ int FindSpy()
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || IsFakeClient(i) || TF2_GetClientTeam(i) != TFTeam_Blue)
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue)
 			continue;
 
 		clients[amount++] = i;
@@ -1908,4 +1909,39 @@ public void TF2_OnWaitingForPlayersEnd()
 public Action Timer_Init(Handle timer)
 {
 	InitLobby();
+}
+
+public Action Command_SetQueuePoints(int client, int args)
+{
+	int target = client;
+
+	if (args > 0)
+	{
+		char sTarget[MAX_TARGET_LENGTH];
+		GetCmdArg(1, sTarget, sizeof(sTarget));
+		target = FindTarget(client, sTarget, false, false);
+
+		if (target == -1)
+		{
+			PrintToChat(client, "Target '%s' not found, please try again.", sTarget);
+			return Plugin_Handled;
+		}
+	}
+
+	char sPoints[32];
+	GetCmdArg(args > 1 ? 2 : 1, sPoints, sizeof(sPoints));
+	int points = StringToInt(sPoints);
+
+	g_QueuePoints[target] = points;
+	UpdateHud(target);
+
+	if (client == target)
+		PrintToChat(client, "You have set your own queue points to %i.", g_QueuePoints[target]);
+	else
+	{
+		PrintToChat(client, "You have set %N's queue points to %i.", target, g_QueuePoints[target]);
+		PrintToChat(target, "%N has set your queue points by %i.", client, g_QueuePoints[target]);
+	}
+
+	return Plugin_Handled;
 }
