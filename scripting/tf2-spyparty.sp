@@ -492,7 +492,7 @@ void OnSpawn(int client)
 			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
 
 			if (TF2_GetPlayerClass(client) == TFClass_Scout)
-				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.5);
+				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.2);
 			else
 				TF2Attrib_RemoveMoveSpeedPenalty(client);
 			
