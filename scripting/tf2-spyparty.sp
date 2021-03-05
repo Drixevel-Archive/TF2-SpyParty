@@ -1,5 +1,4 @@
 /*
-Benefactors
 Change Class Stations
 Lockdown Walls
 */
@@ -30,6 +29,7 @@ Lockdown Walls
 #include <tf2_stocks>
 #include <tf2items>
 #include <tf2attributes>
+#include <misc-colors>
 
 /*****************************/
 //ConVars
@@ -143,6 +143,8 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	CSetPrefix("{darkblue}[{azure}SpyParty{darkblue}] {honeydew}");
+
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
 
@@ -215,7 +217,7 @@ public Action Command_Spy(int client, int args)
 {
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && g_IsSpy[i])
-			PrintToChat(client, "%N is currently a spy!", i);
+			CPrintToChat(client, "{azure}%N {honeydew}is currently a spy!", i);
 	
 	return Plugin_Handled;
 }
@@ -309,7 +311,7 @@ void AddTask(int client, int task)
 		task = GetRandomInt(0, g_TotalTasks - 1);
 	
 	g_RequiredTasks[client].Push(task);
-	PrintToChat(client, "You have been given the task: %s", g_Tasks[task].name);
+	CPrintToChat(client, "You have been given the task: {azure}%s", g_Tasks[task].name);
 	UpdateHud(client);
 
 	EmitSoundToClient(client, "coach/coach_go_here.wav");
@@ -323,7 +325,7 @@ bool CompleteTask(int client, int task)
 	int index = g_RequiredTasks[client].FindValue(task);
 	g_RequiredTasks[client].Erase(index);
 
-	PrintToChat(client, "You have completed the task: %s", g_Tasks[task].name);
+	CPrintToChat(client, "You have completed the task: {azure}%s", g_Tasks[task].name);
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
@@ -341,7 +343,7 @@ bool CompleteTask(int client, int task)
 
 	if (g_TotalTasksEx >= GetMaxTasks())
 	{
-		PrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
+		CPrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
 		TF2_ForceWin(TFTeam_Blue);
 		return true;
 	}
@@ -687,23 +689,23 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	
 	if (g_IsSpy[client])
 	{
-		PrintToChatAll("%N was a spy and has died!", client);
+		CPrintToChatAll("{azure}%N {honeydew}was a spy and has died!", client);
 		TF2_SetPlayerClass(client, TFClass_Spy);
 		g_IsSpy[client] = false;
 	}
 	else if (g_IsBenefactor[client])
 	{
-		PrintToChatAll("%N was a benefactor and has died!", client);
+		CPrintToChatAll("{ancient}%N {honeydew}was a benefactor and has died!", client);
 		g_IsBenefactor[client] = false;
 	}
 	else
 	{
-		PrintToChatAll("%N was NOT a spy and has died!", client);
+		CPrintToChatAll("{aliceblue}%N {honeydew}was NOT a spy and has died!", client);
 
 		int attacker;
 		if ((attacker = GetClientOfUserId(event.GetInt("attacker"))) != -1)
 		{
-			PrintToChat(attacker, "You have shot the wrong target!");
+			CPrintToChat(attacker, "You have shot the wrong target!");
 			TF2_IgnitePlayer(attacker, attacker, 10.0);
 		}
 	}
@@ -738,7 +740,7 @@ public Action Timer_CheckDeath(Handle timer)
 		
 		if (count < 1)
 		{
-			PrintToChatAll("Red has eliminated all spies on the Blue team, Red wins the round.");
+			CPrintToChatAll("Red has eliminated all spies on the Blue team, Red wins the round.");
 			TF2_ForceWin(TFTeam_Red);
 		}
 	}
@@ -1059,7 +1061,7 @@ void CopyArrayToArray(const any[] array, any[] newArray, int size)
 public Action Command_Start(int client, int args)
 {
 	StartMatch();
-	PrintToChat(client, "%N has started the match.", client);
+	CPrintToChat(client, "{azure}%N {honeydew}has started the match.", client);
 	return Plugin_Handled;
 }
 
@@ -1072,7 +1074,7 @@ void StartMatch()
 
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
-			TF2_ChangeClientTeam(i, TFTeam_Blue);
+			TF2_ChangeClientTeam_Alive(i, TFTeam_Blue);
 	
 	g_LobbyTime = 0;
 	StopTimer(g_LobbyTimer);
@@ -1109,12 +1111,12 @@ public Action Timer_CountdownTick(Handle timer)
 	int total = TF2_GetTeamClientCount(TFTeam_Red);
 	int balance = RoundToFloor(count * convar_TeamBalance.FloatValue);
 
-	//PrintToChatAll("count: %i balance: %i - total: %i", count, balance, total);
+	//CPrintToChatAll("count: %i balance: %i - total: %i", count, balance, total);
 
 	if (total < balance)
 	{
 		balance -= total;
-		//PrintToChatAll("moving %i...", balance);
+		//CPrintToChatAll("moving %i...", balance);
 		
 		int moved; int failsafe; int client;
 		while (moved < balance && failsafe < MaxClients)
@@ -1153,7 +1155,7 @@ public Action Timer_PostStart(Handle timer)
 	if (spy == -1)
 	{
 		g_MatchState = STATE_LOBBY;
-		PrintToChatAll("Aborting starting match, couldn't find a spy.");
+		CPrintToChatAll("Aborting starting match, couldn't find a spy.");
 		return Plugin_Stop;
 	}
 	
@@ -1229,8 +1231,8 @@ public Action Timer_PostStart(Handle timer)
 		{
 			case TFTeam_Red:
 			{
-				PrintToChat(i, "Hunt out the spy and assassinate them! You have a limited amount of chances, use them wisely!");
-				PrintToChat(i, "Keep in mind that benefactors can fake you out!");
+				CPrintToChat(i, "Hunt out the spy and assassinate them! You have a limited amount of chances, use them wisely!");
+				CPrintToChat(i, "Keep in mind that benefactors can fake you out!");
 
 				int weapon;
 				for (int slot = 0; slot < 3; slot++)
@@ -1240,8 +1242,8 @@ public Action Timer_PostStart(Handle timer)
 
 			case TFTeam_Blue:
 			{
-				PrintToChat(i, "%N has been chosen as the Spy, protect them at all costs by doing basic tasks!", spy);
-				PrintToChat(i, "%N is a benefactor!", benefactor);
+				CPrintToChat(i, "{azure}%N {honeydew}has been chosen as the Spy, protect them at all costs by doing basic tasks!", spy);
+				CPrintToChat(i, "{ancient}%N {honeydew}is a benefactor!", benefactor);
 			}
 		}
 	}
@@ -1250,7 +1252,7 @@ public Action Timer_PostStart(Handle timer)
 	CreateTF2Timer(900);
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
-	PrintToChat(spy, "Priority Task: %s (Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
+	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -1636,14 +1638,14 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 		if (GetWeaponAmmo(other, weapon) > 0)
 		{
-			PrintToChat(other, "Your sniper is already full.");
+			CPrintToChat(other, "Your sniper is already full.");
 			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
 			return;
 		}
 
 		if (g_LastRefilled[other] > time)
 		{
-			PrintToChat(other, "You must wait %i seconds to refill your sniper.", g_LastRefilled[other] - time);
+			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to refill your sniper.", g_LastRefilled[other] - time);
 			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
 			return;
 		}
@@ -1663,7 +1665,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 	g_NearTask[other] = task;
 	
 	if (HasTask(other, task))
-		PrintToChat(other, "You have this task, press MEDIC! to start this task.");
+		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
 }
 
 public Action OnTouchTrigger(int entity, int other)
@@ -1827,7 +1829,7 @@ public Action Timer_WeaponFirePost(Handle timer)
 	if (g_MatchState != STATE_PLAYING)
 		return Plugin_Stop;
 	
-	PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
+	CPrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
 	TF2_ForceWin(TFTeam_Blue);
 
 	return Plugin_Stop;
@@ -2085,7 +2087,7 @@ public Action Command_SetQueuePoints(int client, int args)
 
 		if (target == -1)
 		{
-			PrintToChat(client, "Target '%s' not found, please try again.", sTarget);
+			CPrintToChat(client, "Target {azure}%s {honeydew}not found, please try again.", sTarget);
 			return Plugin_Handled;
 		}
 	}
@@ -2098,12 +2100,25 @@ public Action Command_SetQueuePoints(int client, int args)
 	UpdateHud(target);
 
 	if (client == target)
-		PrintToChat(client, "You have set your own queue points to %i.", g_QueuePoints[target]);
+		CPrintToChat(client, "You have set your own queue points to {azure}%i{honeydew}.", g_QueuePoints[target]);
 	else
 	{
-		PrintToChat(client, "You have set %N's queue points to %i.", target, g_QueuePoints[target]);
-		PrintToChat(target, "%N has set your queue points by %i.", client, g_QueuePoints[target]);
+		CPrintToChat(client, "You have set {azure}%N{honeydew}'s queue points to {azure}%i{honeydew}.", target, g_QueuePoints[target]);
+		CPrintToChat(target, "{azure}%N {honeydew}has set your queue points by {azure}%i{honeydew}.", client, g_QueuePoints[target]);
 	}
 
 	return Plugin_Handled;
+}
+
+stock bool TF2_ChangeClientTeam_Alive(int client, TFTeam team)
+{
+	if (client == 0 || client > MaxClients || !IsClientInGame(client) || !IsPlayerAlive(client) || team < TFTeam_Red || team > TFTeam_Blue)
+		return false;
+
+	int lifestate = GetEntProp(client, Prop_Send, "m_lifeState");
+	SetEntProp(client, Prop_Send, "m_lifeState", 2);
+	ChangeClientTeam(client, view_as<int>(team));
+	SetEntProp(client, Prop_Send, "m_lifeState", lifestate);
+	
+	return true;
 }
