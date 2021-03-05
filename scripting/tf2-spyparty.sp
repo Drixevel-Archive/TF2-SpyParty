@@ -541,7 +541,10 @@ void OnSpawn(int client)
 					TF2_RemoveWearable(client, entity);
 
 			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
-
+			
+			if (IsValidEntity(g_GlowEnt[client]))
+				SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
+			
 			if (TF2_GetPlayerClass(client) == TFClass_Scout)
 				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.2);
 			else
@@ -555,6 +558,21 @@ void OnSpawn(int client)
 		InitLobby();
 
 	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
+}
+
+public Action OnTransmitGlow(int entity, int client)
+{
+	SetEdictFlags(entity, GetEdictFlags(entity) & ~FL_EDICT_ALWAYS);
+	
+	int owner = GetEntPropEnt(entity, Prop_Send, "m_hTarget");
+
+	if (owner < 1 || owner > MaxClients || client < 1 || client > MaxClients)
+		return Plugin_Continue;
+	
+	if (owner == client || TF2_GetClientTeam(owner) == TF2_GetClientTeam(client))
+		return Plugin_Handled;
+	
+	return Plugin_Continue;
 }
 
 public Action Timer_Hud(Handle timer, any data)
@@ -1126,6 +1144,18 @@ public Action Timer_PostStart(Handle timer)
 	g_IsSpy[spy] = true;
 	PrintCenterText(spy, "YOU ARE THE SPY!");
 	EmitSoundToClient(spy, "coach/coach_look_here.wav");
+
+	if (IsValidEntity(g_GlowEnt[spy]))
+	{
+		int color[4];
+		color[0] = 0;
+		color[1] = 255;
+		color[2] = 0;
+		color[3] = 255;
+		
+		SetVariantColor(color);
+		AcceptEntityInput(g_GlowEnt[spy], "SetGlowColor");
+	}
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
