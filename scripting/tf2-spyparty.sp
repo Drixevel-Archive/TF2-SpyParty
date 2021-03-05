@@ -1632,7 +1632,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	int time = GetTime();
 
-	if (StrEqual(sName, "refill_mag", false) && TF2_GetClientTeam(other) == TFTeam_Red)
+	if (StrEqual(sName, "refill_mag", false) && TF2_GetClientTeam(other) == TFTeam_Red && g_MatchState == STATE_PLAYING)
 	{
 		int weapon = GetEntPropEnt(other, Prop_Send, "m_hActiveWeapon");
 
