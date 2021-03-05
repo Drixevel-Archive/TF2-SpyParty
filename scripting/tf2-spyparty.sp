@@ -414,6 +414,8 @@ public void OnPluginEnd()
 
 		if (IsPlayerAlive(i) && g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
 			AcceptEntityInput(g_GlowEnt[i], "Kill");
+		
+		KillEyeProp(i);
 	}
 
 	PauseTF2Timer();
@@ -483,7 +485,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 void OnSpawn(int client)
 {
 	KillEyeProp(client);
-	
+
 	switch (TF2_GetClientTeam(client))
 	{
 		case TFTeam_Red:
@@ -1664,8 +1666,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 		if (g_TotalShots >= GetMaxShots())
 		{
-			PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
-			TF2_ForceWin(TFTeam_Blue);
+			CreateTimer(1.0, Timer_WeaponFirePost, _, TIMER_FLAG_NO_MAPCHANGE);
 			return MRES_Ignored;
 		}
 		
@@ -1678,6 +1679,17 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	}
 	
 	return MRES_Ignored;
+}
+
+public Action Timer_WeaponFirePost(Handle timer)
+{
+	if (g_MatchState != STATE_PLAYING)
+		return Plugin_Stop;
+	
+	PrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
+	TF2_ForceWin(TFTeam_Blue);
+
+	return Plugin_Stop;
 }
 
 int GetMaxShots()
