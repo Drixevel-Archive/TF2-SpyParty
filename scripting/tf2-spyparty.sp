@@ -335,6 +335,7 @@ bool CompleteTask(int client, int task)
 		return true;
 	}
 
+	ShowTasksPanel(client);
 	return true;
 }
 
@@ -1625,7 +1626,8 @@ int GetTaskByName(const char[] task)
 	
 	return -1;
 }
-
+float g_TaskTimer[MAXPLAYERS + 1];
+Handle g_DoingTask[MAXPLAYERS + 1];
 public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 {
 	char sVoice[32];
@@ -1639,12 +1641,39 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	
 	if (TF2_GetClientTeam(client) == TFTeam_Blue && g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
 	{
-		CompleteTask(client, g_NearTask[client]);
-		g_NearTask[client] = -1;
+		g_TaskTimer[client] = 10.0;
+		StopTimer(g_DoingTask[client]);
+		g_DoingTask[client] = CreateTimer(0.1, Timer_DoingTask, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+
 		return Plugin_Stop;
 	}
 
 	return Plugin_Continue;
+}
+
+public Action Timer_DoingTask(Handle timer, any data)
+{
+	int client = data;
+
+	g_TaskTimer[client] -= 0.1;
+
+	if (g_NearTask[client] == -1)
+	{
+		g_DoingTask[client] = null;
+		return Plugin_Stop;
+	}
+
+	if (g_TaskTimer[client] > 0.0)
+	{
+		PrintCenterText(client, "Doing Task... %i", RoundFloat(g_TaskTimer[client]));
+		return Plugin_Continue;
+	}
+
+	CompleteTask(client, g_NearTask[client]);
+	g_NearTask[client] = -1;
+
+	g_DoingTask[client] = null;
+	return Plugin_Stop;
 }
 
 public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
