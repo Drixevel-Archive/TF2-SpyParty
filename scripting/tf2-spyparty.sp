@@ -1006,6 +1006,9 @@ void StartMatch()
 {
 	convar_AllTalk.BoolValue = false;
 
+	if (GameRules_GetProp("m_bInWaitingForPlayers"))
+		ServerCommand("mp_waitingforplayers_cancel 1");
+
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 			TF2_ChangeClientTeam(i, TFTeam_Blue);
@@ -1378,13 +1381,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 	g_NearTask[other] = task;
 	
 	if (HasTask(other, task))
-	{
 		PrintToChat(other, "You have this task, press MEDIC! to start this task.");
-	}
-	else
-	{
-		PrintToChat(other, "You don't have this task, move to a task that you have.");
-	}
 }
 
 public Action OnTouchTrigger(int entity, int other)
@@ -1701,6 +1698,9 @@ void InitLobby()
 
 public Action Timer_StartMatch(Handle timer)
 {
+	if (GameRules_GetProp("m_bInWaitingForPlayers"))
+		return Plugin_Continue;
+	
 	int count;
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && IsPlayerAlive(i))
@@ -1729,4 +1729,14 @@ public Action Timer_StartMatch(Handle timer)
 	StartMatch();
 
 	return Plugin_Stop;
+}
+
+public void TF2_OnWaitingForPlayersEnd()
+{
+	CreateTimer(0.2, Timer_Init);
+}
+
+public Action Timer_Init(Handle timer)
+{
+	InitLobby();
 }
