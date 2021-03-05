@@ -266,9 +266,8 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 	if ((damagetype & DMG_BURN) == DMG_BURN)
 		return Plugin_Continue;
 	
-	if (TF2_GetClientTeam(victim) == TFTeam_Blue && (damagetype & DMG_FALL) == DMG_FALL)
+	if ((damagetype & DMG_FALL) == DMG_FALL)
 	{
-		//KickClient(victim, "Suicide is illegal here.");
 		damage = 0.0;
 		return Plugin_Changed;
 	}
