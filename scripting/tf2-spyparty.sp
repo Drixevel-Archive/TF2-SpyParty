@@ -37,6 +37,7 @@ Make it so you get 2-3 random tasks every 20-30 seconds
 //ConVars
 
 ConVar convar_TeamBalance;
+ConVar convar_GivenTasks;
 
 /*****************************/
 //Globals
@@ -127,6 +128,7 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
 
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
@@ -1132,9 +1134,10 @@ public Action Timer_CountdownTick(Handle timer)
 		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
 		{
 			g_RequiredTasks[i].Clear();
-			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
-			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
-			//AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+
+			for (int x = 0; x < convar_GivenTasks.IntValue; x++)
+				AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			
 			ShowTasksPanel(i);
 		}
 	}
@@ -1213,9 +1216,10 @@ public Action Timer_GiveTasksTick(Handle timer)
 		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
 		{
 			g_RequiredTasks[i].Clear();
-			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
-			AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
-			//AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+
+			for (int x = 0; x < convar_GivenTasks.IntValue; x++)
+				AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+			
 			ShowTasksPanel(i);
 		}
 	}
