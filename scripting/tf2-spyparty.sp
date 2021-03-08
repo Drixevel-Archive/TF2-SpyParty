@@ -149,7 +149,7 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	CSetPrefix("{darkblue}[{azure}SpyParty{darkblue}] {honeydew}");
+	CSetPrefix("{darkblue}[{azure}SpyParty{darkblue}]{honeydew}");
 
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
