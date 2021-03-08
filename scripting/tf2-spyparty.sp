@@ -570,6 +570,9 @@ void OnSpawn(int client)
 				TF2Attrib_RemoveMoveSpeedPenalty(client);
 			
 			TF2Attrib_RemoveMoveSpeedBonus(client);
+
+			//Temporary fix for spawns in a map with no blue spawns.
+			TeleportEntity(client, view_as<float>({-65.53, 24.58, 2755.0}), view_as<float>({-0.92, 90.71, 0.0}), NULL_VECTOR);
 		}
 	}
 
