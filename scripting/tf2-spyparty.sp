@@ -1265,7 +1265,9 @@ public Action Timer_PostStart(Handle timer)
 			case TFTeam_Blue:
 			{
 				CPrintToChat(i, "{azure}%N {honeydew}has been chosen as the Spy, protect them at all costs by doing basic tasks!", spy);
-				CPrintToChat(i, "{ancient}%N {honeydew}is a benefactor!", benefactor);
+
+				if (benefactor != -1)
+					CPrintToChat(i, "{ancient}%N {honeydew}is a benefactor!", benefactor);
 			}
 		}
 	}
