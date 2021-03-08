@@ -82,6 +82,8 @@ int g_MatchState = STATE_HIBERNATION;
 int g_LobbyTime;
 Handle g_LobbyTimer;
 
+int g_LockdownTime = -1;
+
 int g_Countdown;
 Handle g_CountdownTimer;
 
@@ -1120,6 +1122,8 @@ public Action Timer_CountdownTick(Handle timer)
 		return Plugin_Continue;
 	}
 
+	g_LockdownTime = -1;
+
 	g_Countdown = 0;
 	g_CountdownTimer = null;
 
@@ -1488,6 +1492,32 @@ public void OnEntityCreated(int entity, const char[] classname)
 	
 	if (StrEqual(classname, "env_sniperdot") && g_cvarLaserEnabled.BoolValue)
 		SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
+	
+	if (StrEqual(classname, "func_button", false))
+		SDKHook(entity, SDKHook_OnTakeDamage, OnButtonUse);
+}
+
+public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
+{
+	char sName[64];
+	GetEntPropString(victim, Prop_Data, "m_iName", sName, sizeof(sName));
+
+	int time = GetTime();
+
+	if (StrEqual(sName, "lockdown", false))
+	{
+		if (g_LockdownTime > time)
+		{
+			EmitGameSoundToClient(attacker, "Player.DenyWeaponSelection");
+			CPrintToChat(attacker, "You cannot start another lockdown at this time.");
+			damage = 0.0;
+			return Plugin_Changed;
+		}
+
+		g_LockdownTime = time + 300;
+	}
+
+	return Plugin_Continue;
 }
 
 public Action SpawnPost(int entity)
