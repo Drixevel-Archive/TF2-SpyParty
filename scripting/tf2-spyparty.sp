@@ -84,6 +84,9 @@ Handle g_LobbyTimer;
 
 int g_LockdownTime = -1;
 
+bool g_IsChangingClasses[MAXPLAYERS + 1];
+int g_LastChangedClass[MAXPLAYERS + 1] = {-1, ...};
+
 int g_Countdown;
 Handle g_CountdownTimer;
 
@@ -282,6 +285,9 @@ public void OnClientDisconnect_Post(int client)
 	g_GlowEnt[client] = -1;
 
 	g_QueuePoints[client] = 0;
+
+	g_IsChangingClasses[client] = false;
+	g_LastChangedClass[client] = -1;
 }
 
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -512,7 +518,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	return Plugin_Stop;
 }
 
-void OnSpawn(int client)
+void OnSpawn(int client, bool class = true)
 {
 	KillEyeProp(client);
 
@@ -551,7 +557,8 @@ void OnSpawn(int client)
 
 		case TFTeam_Blue:
 		{
-			TF2_SetPlayerClass(client, GetRandomClass());
+			if (class)
+				TF2_SetPlayerClass(client, GetRandomClass());
 			TF2_RegeneratePlayer(client);
 
 			EquipWeaponSlot(client, TFWeaponSlot_Melee);
@@ -582,7 +589,8 @@ void OnSpawn(int client)
 			TF2Attrib_RemoveMoveSpeedBonus(client);
 
 			//Temporary fix for spawns in a map with no blue spawns.
-			TeleportEntity(client, view_as<float>({-65.53, 24.58, 2755.0}), view_as<float>({-0.92, 90.71, 0.0}), NULL_VECTOR);
+			if (class)
+				TeleportEntity(client, view_as<float>({-65.53, 24.58, 2755.0}), view_as<float>({-0.92, 90.71, 0.0}), NULL_VECTOR);
 		}
 	}
 
@@ -1710,6 +1718,19 @@ public Action OnTouchTriggerStart(int entity, int other)
 		
 		return;
 	}
+	else if (StrEqual(sName, "changing_room", false))
+	{
+		if (g_LastChangedClass[other] > time)
+		{
+			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_LastChangedClass[other] - time);
+			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
+			return;
+		}
+		
+		g_IsChangingClasses[other] = true;
+		OpenClassChangeMenu(other);
+		return;
+	}
 
 	int task = GetTaskByName(sName);
 
@@ -1720,6 +1741,58 @@ public Action OnTouchTriggerStart(int entity, int other)
 	
 	if (HasTask(other, task))
 		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
+}
+
+void OpenClassChangeMenu(int client)
+{
+	Menu menu = new Menu(MenuHandler_ClassChange);
+	menu.SetTitle("Pick a class:");
+
+	menu.AddItem("1", "Scout");
+	menu.AddItem("3", "Soldier");
+	menu.AddItem("7", "Pyro");
+	menu.AddItem("4", "Demoman");
+	menu.AddItem("6", "Heavy");
+	menu.AddItem("9", "Engineer");
+	menu.AddItem("5", "Medic");
+	menu.AddItem("2", "Sniper");
+	menu.AddItem("8", "Spy");
+
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int MenuHandler_ClassChange(Menu menu, MenuAction action, int param1, int param2)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			if (!g_IsChangingClasses[param1])
+				return;
+			
+			int time = GetTime();
+
+			if (g_LastChangedClass[param1] > time)
+			{
+				CPrintToChat(param1, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_LastChangedClass[param1] - time);
+				EmitGameSoundToClient(param1, "Player.DenyWeaponSelection");
+				return;
+			}
+			
+			char sInfo[32]; char sName[32];
+			menu.GetItem(param2, sInfo, sizeof(sInfo), _, sName, sizeof(sName));
+
+			TFClassType class = view_as<TFClassType>(StringToInt(sInfo));
+			TF2_SetPlayerClass(param1, class, false, true);
+			OnSpawn(param1, false);
+
+			g_LastChangedClass[param1] = time + 30;
+			CPrintToChat(param1, "You have switched your class to {azure}%s{honeydew}.", g_LastChangedClass[param1] - time, sName);
+		}
+		
+		case MenuAction_End:
+			delete menu;
+	}
 }
 
 public Action OnTouchTrigger(int entity, int other)
@@ -1743,6 +1816,13 @@ public Action OnTouchTriggerEnd(int entity, int other)
 	
 	char sName[64];
 	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+	if (StrEqual(sName, "changing_room", false))
+	{
+		g_IsChangingClasses[other] = false;
+		CancelClientMenu(other);
+		return;
+	}
 
 	int task = GetTaskByName(sName);
 
