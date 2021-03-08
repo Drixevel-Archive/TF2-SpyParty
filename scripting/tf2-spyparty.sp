@@ -30,6 +30,7 @@ Lockdown Walls
 #include <tf2items>
 #include <tf2attributes>
 #include <misc-colors>
+#include <customkeyvalues>
 
 /*****************************/
 //ConVars
@@ -299,13 +300,20 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 void ParseTasks()
 {
 	g_TotalTasks = 0;
-	g_Tasks[g_TotalTasks++].Add("Rearrange Boxes", "task_boxes");
-	g_Tasks[g_TotalTasks++].Add("Manage Data", "task_data");
-	g_Tasks[g_TotalTasks++].Add("Tighten the Valve", "task_valve");
-	g_Tasks[g_TotalTasks++].Add("Paint a Painting", "task_paint");
-	g_Tasks[g_TotalTasks++].Add("Plot World Domination", "task_plot");
-	g_Tasks[g_TotalTasks++].Add("Make Food", "task_food");
-	g_Tasks[g_TotalTasks++].Add("Play Pool", "task_pool");
+
+	int entity = -1; char sClassname[64]; char sName[64];
+	while ((entity = FindEntityByClassname(entity, "trigger_multiple")) != -1)
+	{
+		GetEntPropString(entity, Prop_Data, "m_iName", sClassname, sizeof(sClassname));
+
+		if (StrContains(sClassname, "task_", false) != 0)
+				continue;
+		
+		GetCustomKeyValue(entity, "task", sName,  sizeof(sName));
+		
+		g_Tasks[g_TotalTasks++].Add(sName, sClassname);
+		PrintToChatAll("%s: %s", sName, sClassname);
+	}
 }
 
 void AddTask(int client, int task)
