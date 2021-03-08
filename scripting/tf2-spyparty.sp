@@ -320,7 +320,6 @@ void ParseTasks()
 		GetCustomKeyValue(entity, "task", sName,  sizeof(sName));
 		
 		g_Tasks[g_TotalTasks++].Add(sName, sClassname);
-		PrintToChatAll("%s: %s", sName, sClassname);
 	}
 }
 
@@ -465,6 +464,8 @@ public void OnMapStart()
 	PrecacheSound("coach/coach_go_here.wav");
 	PrecacheSound("coach/coach_defend_here.wav");
 	PrecacheSound("coach/coach_look_here.wav");
+
+	PrecacheSound("ambient/alarms/doomsday_lift_alarm.wav");
 
 	g_iLaserMaterial = PrecacheModel("materials/sprites/laserbeam.vmt");
 	g_iHaloMaterial = PrecacheModel("materials/sprites/halo01.vmt");
@@ -1517,12 +1518,13 @@ public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& dama
 		if (g_LockdownTime > time)
 		{
 			EmitGameSoundToClient(attacker, "Player.DenyWeaponSelection");
-			CPrintToChat(attacker, "You cannot start another lockdown at this time.");
+			CPrintToChat(attacker, "You must wait another {azure}%i {honeydew} seconds to start another lockdown.", g_LockdownTime - time);
 			damage = 0.0;
 			return Plugin_Changed;
 		}
 
 		g_LockdownTime = time + 300;
+		EmitSoundToAll("ambient/alarms/doomsday_lift_alarm.wav", victim);
 	}
 
 	return Plugin_Continue;
