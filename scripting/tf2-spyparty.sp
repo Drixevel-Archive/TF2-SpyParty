@@ -301,6 +301,12 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 		return Plugin_Changed;
 	}
 
+	if (attacker > 0 && attacker <= MaxClients && GetClientTeam(victim) != GetClientTeam(attacker))
+	{
+		damage = 0.0;
+		return Plugin_Changed;
+	}
+
 	damage = 500.0;
 	return Plugin_Changed;
 }
@@ -351,10 +357,7 @@ bool CompleteTask(int client, int task)
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
 	if (g_IsSpy[client] && task == g_SpyTask)
-	{
 		EmitSoundToAll("coach/coach_look_here.wav");
-		g_TotalTasksEx++;
-	}
 	
 	g_TotalTasksEx++;
 
@@ -588,10 +591,6 @@ void OnSpawn(int client, bool class = true)
 				TF2Attrib_RemoveMoveSpeedPenalty(client);
 			
 			TF2Attrib_RemoveMoveSpeedBonus(client);
-
-			//Temporary fix for spawns in a map with no blue spawns.
-			if (class)
-				TeleportEntity(client, view_as<float>({-65.53, 24.58, 2755.0}), view_as<float>({-0.92, 90.71, 0.0}), NULL_VECTOR);
 		}
 	}
 
