@@ -2021,7 +2021,22 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 				UpdateHud(i);
 		
 		if (g_LastRefilled[client] != -1)
+		{
 			g_LastRefilled[client] = GetTime() + 10;
+
+			int entity = -1; float origin[3]; char sName[32];
+			while ((entity = FindEntityByClassname(entity, "trigger_multiple")) != -1)
+			{
+				GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+				if (!StrEqual(sName, "refill_mag", false))
+					continue;
+
+				GetEntPropVector(entity, Prop_Send, "m_vecAbsOrigin", origin);
+				origin[2] += 10.0;
+				TF2_CreateAnnotation(client, origin, "Ammo Crate");
+			}
+		}
 	}
 	
 	return MRES_Ignored;
@@ -2349,4 +2364,27 @@ stock void SpeakResponseConcept(int client, const char[] concept, const char[] c
 
 	if (hascontext)
 		AcceptEntityInput(client, "ClearContext");
+}
+
+void TF2_CreateAnnotation(int client, float[3] origin, const char[] text, float lifetime = 10.0, const char[] sound = "vo/null.wav")
+{
+	if (!IsClientInGame(client))
+		return;
+	
+	Event event = CreateEvent("show_annotation");
+		
+	if (event == null)
+		return;
+		
+	event.SetFloat("worldPosX", origin[0]);
+	event.SetFloat("worldPosY", origin[1]);
+	event.SetFloat("worldPosZ", origin[2]);
+	event.SetInt("follow_entindex", client);
+	event.SetFloat("lifetime", lifetime);
+	event.SetInt("id", client + 8750);
+	event.SetString("text", text);
+	event.SetString("play_sound", sound);
+	event.SetString("show_effect", "0");
+	event.SetString("show_distance", "0");
+	event.Fire(false);
 }
