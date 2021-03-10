@@ -790,7 +790,7 @@ void EquipWeaponSlot(int client, int slot)
 	}
 }
 
-TFClassType GetRandomClass()
+stock TFClassType GetRandomClass()
 {
 	TFClassType classes[7];
 
@@ -1497,8 +1497,6 @@ public void OnEntityCreated(int entity, const char[] classname)
 	
 	if (StrEqual(classname, "func_button", false))
 		SDKHook(entity, SDKHook_OnTakeDamage, OnButtonUse);
-	
-	PrintToServer(classname);
 }
 
 public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
