@@ -1929,16 +1929,16 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 		g_TotalShots++;
 		SpeakResponseConcept(client, "TLK_FIREWEAPON");
 
-		if (g_TotalShots >= GetMaxShots())
-		{
-			CreateTimer(1.0, Timer_WeaponFirePost, _, TIMER_FLAG_NO_MAPCHANGE);
-			return MRES_Ignored;
-		}
-		
 		for (int i = 1; i <= MaxClients; i++)
 			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 				UpdateHud(i);
 		
+		if (g_TotalShots >= GetMaxShots())
+		{
+			CreateTimer(0.5, Timer_WeaponFirePost, _, TIMER_FLAG_NO_MAPCHANGE);
+			return MRES_Ignored;
+		}
+
 		if (g_LastRefilled[client] != -1)
 		{
 			g_LastRefilled[client] = GetTime() + 10;
