@@ -1,8 +1,3 @@
-/*
-Change Class Stations
-Lockdown Walls
-*/
-
 /*****************************/
 //Pragma
 #pragma semicolon 1
