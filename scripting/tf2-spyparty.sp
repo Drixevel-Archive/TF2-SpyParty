@@ -1205,7 +1205,10 @@ public Action Timer_PostStart(Handle timer)
 		AcceptEntityInput(g_GlowEnt[spy], "SetGlowColor");
 	}
 
-	int benefactor = FindBenefactor();
+	int benefactor = -1;
+
+	if (TF2_GetTeamClientCount(TFTeam_Blue) > 4)
+		benefactor = FindBenefactor();
 
 	if (benefactor != -1)
 	{
