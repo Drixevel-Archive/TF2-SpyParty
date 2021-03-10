@@ -526,67 +526,69 @@ void OnSpawn(int client)
 {
 	KillEyeProp(client);
 
-	switch (TF2_GetClientTeam(client))
+	if (IsPlayerAlive(client))
 	{
-		case TFTeam_Red:
+		switch (TF2_GetClientTeam(client))
 		{
-			TF2_SetPlayerClass(client, TFClass_Sniper);
-			TF2_RegeneratePlayer(client);
+			case TFTeam_Red:
+			{
+				TF2_SetPlayerClass(client, TFClass_Sniper);
+				TF2_RegeneratePlayer(client);
 
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
-			TF2_GiveItem(client, "tf_weapon_sniperrifle", 14, TF2Quality_Normal, 0, "");
-			EquipWeaponSlot(client, TFWeaponSlot_Primary);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
+				TF2_GiveItem(client, "tf_weapon_sniperrifle", 14, TF2Quality_Normal, 0, "");
+				EquipWeaponSlot(client, TFWeaponSlot_Primary);
 
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Melee);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Melee);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 
-			int entity;
-			while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
-				if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
-					TF2_RemoveWearable(client, entity);
+				int entity;
+				while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
+					if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+						TF2_RemoveWearable(client, entity);
 
-			int weapon;
-			for (int slot = 0; slot < 3; slot++)
-				if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
-					SetWeaponAmmo(client, weapon, 1);
-			
-			TF2Attrib_ApplyMoveSpeedBonus(client, 0.8);
-		}
+				int weapon;
+				for (int slot = 0; slot < 3; slot++)
+					if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
+						SetWeaponAmmo(client, weapon, 1);
+				
+				TF2Attrib_ApplyMoveSpeedBonus(client, 0.8);
+			}
 
-		case TFTeam_Blue:
-		{
-			TF2_RegeneratePlayer(client);
+			case TFTeam_Blue:
+			{
+				TF2_RegeneratePlayer(client);
 
-			EquipWeaponSlot(client, TFWeaponSlot_Melee);
+				EquipWeaponSlot(client, TFWeaponSlot_Melee);
 
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
-			TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Grenade);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Building);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_PDA);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item1);
+				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Item2);
 
-			int entity;
-			while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
-				if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
-					TF2_RemoveWearable(client, entity);
+				int entity;
+				while ((entity = FindEntityByClassname(entity, "tf_wearable_")) != -1)
+					if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+						TF2_RemoveWearable(client, entity);
 
-			g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
-			
-			if (IsValidEntity(g_GlowEnt[client]))
-				SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
-			
-			TF2Attrib_RemoveMoveSpeedBonus(client);
+				g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
+				
+				if (IsValidEntity(g_GlowEnt[client]))
+					SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
+				
+				TF2Attrib_RemoveMoveSpeedBonus(client);
+			}
 		}
 	}
-
-	if (!IsPlayerAlive(client))
+	else 
 		TF2_RespawnPlayer(client);
 
 	if (g_MatchState == STATE_HIBERNATION)
