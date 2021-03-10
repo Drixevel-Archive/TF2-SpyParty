@@ -95,7 +95,7 @@ bool g_IsBenefactor[MAXPLAYERS + 1];
 
 int g_BenefactorNoises[MAXPLAYERS + 1];
 
-int g_LastRefilled[MAXPLAYERS + 1];
+int g_LastRefilled[MAXPLAYERS + 1] = {-1, ...};
 
 enum struct Tasks
 {
@@ -277,7 +277,7 @@ public void OnClientDisconnect_Post(int client)
 
 	g_BenefactorNoises[client] = 0;
 
-	g_LastRefilled[client] = 0;
+	g_LastRefilled[client] = -1;
 
 	delete g_RequiredTasks[client];
 	g_NearTask[client] = -1;
@@ -1252,7 +1252,7 @@ public Action Timer_PostStart(Handle timer)
 		if (!IsClientInGame(i))
 			continue;
 		
-		g_LastRefilled[i] = 0;
+		g_LastRefilled[i] = -1;
 		
 		if (IsPlayerAlive(i))
 		{
@@ -2020,7 +2020,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 				UpdateHud(i);
 		
-		if (g_LastRefilled[client] < 1)
+		if (g_LastRefilled[client] != -1)
 			g_LastRefilled[client] = GetTime() + 10;
 	}
 	
@@ -2097,7 +2097,7 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 		g_IsSpy[i] = false;
 		g_IsBenefactor[i] = false;
 
-		g_LastRefilled[i] = 0;
+		g_LastRefilled[i] = -1;
 
 		if (g_RequiredTasks[i] != null)
 			g_RequiredTasks[i].Clear();
