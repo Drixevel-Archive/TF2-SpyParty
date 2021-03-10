@@ -567,7 +567,7 @@ void OnSpawn(int client)
 					if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
 						TF2_RemoveWearable(client, entity);
 
-				int weapon;
+				weapon = -1;
 				for (int slot = 0; slot < 3; slot++)
 					if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
 						SetWeaponAmmo(client, weapon, 1);
@@ -634,7 +634,7 @@ public Action Timer_Hud(Handle timer, any data)
 		UpdateHud(client);
 }
 
-stock int TF2_GiveItem(int client, char[] classname, int index, TF2Quality quality = TF2Quality_Normal, int level = 0, const char[] attributes = "")
+int TF2_GiveItem(int client, char[] classname, int index, TF2Quality quality = TF2Quality_Normal, int level = 0, const char[] attributes = "")
 {
 	char sClass[64];
 	strcopy(sClass, sizeof(sClass), classname);
@@ -787,7 +787,7 @@ public Action Timer_CheckDeath(Handle timer)
 	}
 }
 
-stock void TF2_ForceWin(TFTeam team = TFTeam_Unassigned)
+void TF2_ForceWin(TFTeam team = TFTeam_Unassigned)
 {
 	int iFlags = GetCommandFlags("mp_forcewin");
 	SetCommandFlags("mp_forcewin", iFlags &= ~FCVAR_CHEAT);
@@ -805,21 +805,6 @@ void EquipWeaponSlot(int client, int slot)
 		GetEntityClassname(iWeapon, class, sizeof(class));
 		FakeClientCommand(client, "use %s", class);
 	}
-}
-
-stock TFClassType GetRandomClass()
-{
-	TFClassType classes[7];
-
-	classes[0] = TFClass_Scout;
-	classes[1] = TFClass_Soldier;
-	classes[2] = TFClass_DemoMan;
-	classes[3] = TFClass_Medic;
-	classes[4] = TFClass_Heavy;
-	classes[5] = TFClass_Pyro;
-	classes[6] = TFClass_Engineer;
-
-	return classes[GetRandomInt(0, 6)];
 }
 
 void UpdateHudAll()
@@ -968,7 +953,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	}
 }
 
-stock bool GetClientLookOrigin(int client, float pOrigin[3], bool filter_players = true, float distance = 35.0)
+bool GetClientLookOrigin(int client, float pOrigin[3], bool filter_players = true, float distance = 35.0)
 {
 	if (client == 0 || client > MaxClients || !IsClientInGame(client))
 		return false;
@@ -2360,7 +2345,7 @@ public Action Command_SetQueuePoints(int client, int args)
 	return Plugin_Handled;
 }
 
-stock bool TF2_ChangeClientTeam_Alive(int client, TFTeam team)
+bool TF2_ChangeClientTeam_Alive(int client, TFTeam team)
 {
 	if (client == 0 || client > MaxClients || !IsClientInGame(client) || !IsPlayerAlive(client) || team < TFTeam_Red || team > TFTeam_Blue)
 		return false;
@@ -2373,7 +2358,7 @@ stock bool TF2_ChangeClientTeam_Alive(int client, TFTeam team)
 	return true;
 }
 
-stock void SpeakResponseConcept(int client, const char[] concept, const char[] context = "", const char[] class = "")
+void SpeakResponseConcept(int client, const char[] concept, const char[] context = "", const char[] class = "")
 {
 	bool hascontext;
 
