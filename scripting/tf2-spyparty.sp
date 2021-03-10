@@ -922,13 +922,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 		}
 		else
 		{
-			SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetTime() + 999.0);
-
-			if (active > 0)
-			{
-				SetEntPropFloat(active, Prop_Send, "m_flNextPrimaryAttack", GetTime() + 999.0);
-				SetEntPropFloat(active, Prop_Send, "m_flNextSecondaryAttack", GetTime() + 999.0);
-			}
+			SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime() + 999.0);
 		}
 	}
 
@@ -1183,13 +1177,14 @@ public Action Timer_CountdownTick(Handle timer)
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
-		{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (TF2_GetClientTeam(i) == TFTeam_Blue)
 			g_QueuePoints[i]++;
-
-			if (!IsPlayerAlive(i))
-				TF2_RespawnPlayer(i);
-		}
+		
+		if (!IsPlayerAlive(i))
+			TF2_RespawnPlayer(i);
 	}
 
 	CreateTimer(0.2, Timer_PostStart, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -1249,34 +1244,13 @@ public Action Timer_PostStart(Handle timer)
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
+		g_LastRefilled[i] = -1;
+
 		if (!IsClientInGame(i))
 			continue;
 		
-		g_LastRefilled[i] = -1;
-		
-		if (IsPlayerAlive(i))
-		{
-			SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime() + 15000.0);
-
-			int weapon;
-			for (int slot = 0; slot < 3; slot++)
-			{
-				if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
-				{
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + 15000.0);
-					SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime() + 15000.0);
-				}
-			}
-
-			if (TF2_GetClientTeam(i) == TFTeam_Red)
-			{
-				PrintCenterText(i, "You can take your 1st shot in 15 seconds...");
-				CreateTimer(15.0, Timer_ShotAllowed, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
-			}
-		}
-
-		TF2_RespawnPlayer(i);
-		UpdateHud(i);
+		if (!IsPlayerAlive(i) || TF2_GetClientTeam(i) == TFTeam_Blue)
+			TF2_RespawnPlayer(i);
 
 		switch (TF2_GetClientTeam(i))
 		{
@@ -1289,6 +1263,10 @@ public Action Timer_PostStart(Handle timer)
 				for (int slot = 0; slot < 3; slot++)
 					if ((weapon = GetPlayerWeaponSlot(i, slot)) != -1)
 						SetWeaponAmmo(i, weapon, 1);
+				
+				SetEntPropFloat(i, Prop_Send, "m_flNextAttack", GetGameTime() + 99999.0);
+				PrintCenterText(i, "You can take your 1st shot in 15 seconds...");
+				CreateTimer(15.0, Timer_ShotAllowed, GetClientUserId(i), TIMER_FLAG_NO_MAPCHANGE);
 			}
 
 			case TFTeam_Blue:
@@ -1297,8 +1275,17 @@ public Action Timer_PostStart(Handle timer)
 
 				if (benefactor != -1)
 					CPrintToChat(i, "{ancient}%N {honeydew}is a benefactor!", benefactor);
+				
+				g_RequiredTasks[i].Clear();
+
+				for (int x = 0; x < convar_GivenTasks.IntValue; x++)
+					AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
+				
+				ShowTasksPanel(i);
 			}
 		}
+
+		UpdateHud(i);
 	}
 
 	convar_RespawnWaveTime.IntValue = 99999;
@@ -1306,19 +1293,6 @@ public Action Timer_PostStart(Handle timer)
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
 	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
-	
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
-		{
-			g_RequiredTasks[i].Clear();
-
-			for (int x = 0; x < convar_GivenTasks.IntValue; x++)
-				AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
-			
-			ShowTasksPanel(i);
-		}
-	}
 
 	g_GiveTasks = GetRandomInt(60, 80);
 	StopTimer(g_GiveTasksTimer);
@@ -1331,7 +1305,10 @@ public Action Timer_ShotAllowed(Handle timer, any data)
 {
 	int client;
 	if ((client = GetClientOfUserId(data)) > 0 && IsClientInGame(client) && IsPlayerAlive(client) && TF2_GetClientTeam(client) == TFTeam_Red)
+	{
 		PrintCenterText(client, "You may take your 1st shot!");
+		SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime());
+	}
 }
 
 int TF2_GetTeamClientCount(TFTeam team)
