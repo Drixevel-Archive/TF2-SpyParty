@@ -1362,6 +1362,9 @@ void ShowTasksPanel(int client)
 	panel.SetTitle("Available Tasks:");
 
 	char sDisplay[128];
+	FormatEx(sDisplay, sizeof(sDisplay), "Priority Task: %s", g_Tasks[g_SpyTask].name);
+	panel.DrawText(sDisplay);
+
 	for (int i = 0; i < g_RequiredTasks[client].Length; i++)
 	{
 		int task = g_RequiredTasks[client].Get(i);
