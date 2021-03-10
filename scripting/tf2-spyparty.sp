@@ -522,7 +522,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	return Plugin_Stop;
 }
 
-void OnSpawn(int client, bool class = true)
+void OnSpawn(int client)
 {
 	KillEyeProp(client);
 
@@ -555,14 +555,11 @@ void OnSpawn(int client, bool class = true)
 				if ((weapon = GetPlayerWeaponSlot(client, slot)) != -1)
 					SetWeaponAmmo(client, weapon, 1);
 			
-			TF2Attrib_RemoveMoveSpeedPenalty(client);
 			TF2Attrib_ApplyMoveSpeedBonus(client, 0.8);
 		}
 
 		case TFTeam_Blue:
 		{
-			if (class)
-				TF2_SetPlayerClass(client, GetRandomClass());
 			TF2_RegeneratePlayer(client);
 
 			EquipWeaponSlot(client, TFWeaponSlot_Melee);
@@ -584,11 +581,6 @@ void OnSpawn(int client, bool class = true)
 			
 			if (IsValidEntity(g_GlowEnt[client]))
 				SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
-			
-			if (TF2_GetPlayerClass(client) == TFClass_Scout)
-				TF2Attrib_ApplyMoveSpeedPenalty(client, 0.2);
-			else
-				TF2Attrib_RemoveMoveSpeedPenalty(client);
 			
 			TF2Attrib_RemoveMoveSpeedBonus(client);
 		}
@@ -1658,6 +1650,9 @@ public void OnGameFrame()
 				g_iDotController[i] = INVALID_ENT_REFERENCE;
 			}
 		}
+
+		if (IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue && GetEntPropFloat(i, Prop_Send, "m_flMaxspeed") != 300.0)
+			SetEntPropFloat(i, Prop_Send, "m_flMaxspeed", 300.0);
 	}
 }
 
@@ -1791,7 +1786,7 @@ public int MenuHandler_ClassChange(Menu menu, MenuAction action, int param1, int
 
 			TFClassType class = view_as<TFClassType>(StringToInt(sInfo));
 			TF2_SetPlayerClass(param1, class, false, true);
-			OnSpawn(param1, false);
+			OnSpawn(param1);
 
 			g_LastChangedClass[param1] = time + 30;
 			CPrintToChat(param1, "You have switched your class to {azure}%s{honeydew}.", g_LastChangedClass[param1] - time, sName);
@@ -2181,27 +2176,15 @@ stock void UnpauseTF2Timer()
 	AcceptEntityInput(entity, "Resume");
 }
 
-stock void TF2Attrib_ApplyMoveSpeedBonus(int client, float value)
+void TF2Attrib_ApplyMoveSpeedBonus(int client, float value)
 {
 	TF2Attrib_SetByName(client, "move speed bonus", 1.0 + value);
 	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
 }
 
-stock void TF2Attrib_RemoveMoveSpeedBonus(int client)
+void TF2Attrib_RemoveMoveSpeedBonus(int client)
 {
 	TF2Attrib_RemoveByName(client, "move speed bonus");
-	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
-}
-
-stock void TF2Attrib_ApplyMoveSpeedPenalty(int client, float value)
-{
-	TF2Attrib_SetByName(client, "move speed penalty", 1.0 - value);
-	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
-}
-
-stock void TF2Attrib_RemoveMoveSpeedPenalty(int client)
-{
-	TF2Attrib_RemoveByName(client, "move speed penalty");
 	TF2_AddCondition(client, TFCond_SpeedBuffAlly, 0.0);
 }
 
