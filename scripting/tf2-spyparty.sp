@@ -130,6 +130,9 @@ Handle g_DoingTask[MAXPLAYERS + 1];
 
 bool g_IsMarked[MAXPLAYERS + 1];
 
+Handle g_StartMatchCommand;
+bool g_IsPaused;
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -489,6 +492,7 @@ public void OnMapEnd()
 
 	g_LobbyTimer = null;
 	g_GiveTasksTimer = null;
+	g_StartMatchCommand = null;
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -1040,12 +1044,6 @@ void CopyArrayToArray(const any[] array, any[] newArray, int size)
 
 public Action Command_Start(int client, int args)
 {
-	StartMatch(client);
-	return Plugin_Handled;
-}
-
-void StartMatch(int client = -1)
-{
 	int count;
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i) && IsPlayerAlive(i))
@@ -1053,17 +1051,26 @@ void StartMatch(int client = -1)
 	
 	if (count < 2)
 	{
-		if (client != -1)
-		{
-			CPrintToChat(client, "You cannot manually start the match unless there's two available players.");
-			EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
-		}
-		
-		return;
+		CPrintToChat(client, "You cannot manually start the match unless there's two available players.");
+		EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
+		return Plugin_Handled;
 	}
 
-	if (client != -1)
-		CPrintToChat(client, "{azure}%N {honeydew}has started the match.", client);
+	CPrintToChatAll("{azure}%N {honeydew}has started the match.", client);
+	
+	CreateTeamTimer(10, 900, true);
+
+	StopTimer(g_StartMatchCommand);
+	g_StartMatchCommand = CreateTimer(10.0, Timer_StartMatchCommand, _, TIMER_FLAG_NO_MAPCHANGE);
+
+	return Plugin_Handled;
+}
+
+public Action Timer_StartMatchCommand(Handle timer, any data)
+{
+	g_StartMatchCommand = null;
+	StartMatch();
+}
 
 	convar_AllTalk.BoolValue = false;
 
@@ -2023,6 +2030,8 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	g_LobbyTime = 0;
 	StopTimer(g_LobbyTimer);
 
+	StopTimer(g_StartMatchCommand);
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		g_IsSpy[i] = false;
@@ -2093,7 +2102,7 @@ int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255,
 	return glow;
 }
 
-stock void CreateTeamTimer(int setup_time = 120, int round_time = 900)
+void CreateTeamTimer(int setup_time = 120, int round_time = 900, bool countdown = true)
 {
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
@@ -2101,38 +2110,16 @@ stock void CreateTeamTimer(int setup_time = 120, int round_time = 900)
 		entity = CreateEntityByName("team_round_timer");
 	
 	char sSetup[32];
-	IntToString(setup_time, sSetup, sizeof(sSetup));
+	IntToString(setup_time + 1, sSetup, sizeof(sSetup));
 	
 	char sRound[32];
-	IntToString(round_time, sRound, sizeof(sRound));
-	
-	DispatchKeyValue(entity, "reset_time", "1");
-	DispatchKeyValue(entity, "setup_length", sSetup);
-	DispatchKeyValue(entity, "timer_length", sRound);
-	DispatchKeyValue(entity, "auto_countdown", "1");
-	DispatchSpawn(entity);
-
-	AcceptEntityInput(entity, "Resume");
-
-	SetVariantInt(1);
-	AcceptEntityInput(entity, "ShowInHUD");
-}
-
-stock void CreateTF2Timer(int timer, bool countdown = false)
-{
-	int entity = FindEntityByClassname(-1, "team_round_timer");
-
-	if (!IsValidEntity(entity))
-		entity = CreateEntityByName("team_round_timer");
-	
-	char sTime[32];
-	IntToString(timer + 1, sTime, sizeof(sTime));
+	IntToString(round_time + 1, sRound, sizeof(sRound));
 	
 	DispatchKeyValue(entity, "reset_time", "1");
 	DispatchKeyValue(entity, "show_time_remaining", "1");
-	DispatchKeyValue(entity, "setup_length", "10");
+	DispatchKeyValue(entity, "setup_length", sSetup);
+	DispatchKeyValue(entity, "timer_length", sRound);
 	DispatchKeyValue(entity, "auto_countdown", countdown ? "1" : "0");
-	DispatchKeyValue(entity, "timer_length", sTime);
 	DispatchSpawn(entity);
 
 	AcceptEntityInput(entity, "Resume");
@@ -2194,7 +2181,7 @@ void InitLobby()
 	convar_AllTalk.BoolValue = true;
 
 	g_MatchState = STATE_LOBBY;
-	CreateTeamTimer();
+	CreateTeamTimer(120, 900, true);
 
 	StopTimer(g_LobbyTimer);
 	g_LobbyTime = 120;
@@ -2213,7 +2200,7 @@ public Action Timer_StartMatch(Handle timer)
 	
 	if (count < 3)
 	{
-		if (!IsTimerPaused())
+		if (!IsTimerPaused() && !g_IsPaused)
 		{
 			PauseTF2Timer();
 			UpdateHudAll();
@@ -2223,7 +2210,7 @@ public Action Timer_StartMatch(Handle timer)
 	}
 	else
 	{
-		if (IsTimerPaused())
+		if (IsTimerPaused() && !g_IsPaused)
 		{
 			UnpauseTF2Timer();
 			UpdateHudAll();
@@ -2357,6 +2344,7 @@ void TF2_CreateAnnotation(int client, float[3] origin, const char[] text, float 
 
 public Action Command_Pause(int client, int args)
 {
+	g_IsPaused = true;
 	PauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has paused the timer.", client);
 	return Plugin_Handled;
@@ -2364,6 +2352,7 @@ public Action Command_Pause(int client, int args)
 
 public Action Command_Unpause(int client, int args)
 {
+	g_IsPaused = false;
 	UnpauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has resumed the timer.", client);
 	return Plugin_Handled;
