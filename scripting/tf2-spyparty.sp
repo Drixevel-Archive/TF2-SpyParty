@@ -116,6 +116,9 @@ int g_GlowEnt[MAXPLAYERS + 1] = {-1, ...};
 
 int g_SpyTask;
 
+bool g_SpyHasDoneTask;
+Handle g_UnlockSnipers;
+
 int g_iLaserMaterial;
 int g_iHaloMaterial;
 
@@ -161,6 +164,8 @@ public void OnPluginStart()
 	convar_AutoTeamBalance = FindConVar("mp_autoteambalance");
 	convar_TeamBalanceLimit = FindConVar("mp_teams_unbalance_limit");
 	convar_AutoScramble = FindConVar("mp_scrambleteams_auto");
+
+	RegAdminCmd("sm_tasks", Command_Tasks, ADMFLAG_ROOT, "Show what tasks you have.");
 
 	RegAdminCmd("sm_start", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
@@ -363,8 +368,14 @@ bool CompleteTask(int client, int task)
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
 	if (g_IsSpy[client] && task == g_SpyTask)
+	{
 		EmitSoundToAll("coach/coach_look_here.wav");
+
+		g_SpyHasDoneTask = true;
+		StopTimer(g_UnlockSnipers);
+	}
 	
+	AddTime();
 	g_TotalTasksEx++;
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -493,6 +504,7 @@ public void OnMapEnd()
 	g_LobbyTimer = null;
 	g_GiveTasksTimer = null;
 	g_StartMatchCommand = null;
+	g_UnlockSnipers = null;
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -919,6 +931,11 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 				Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
 			}
 		}
+		else if (TF2_GetClientTeam(client) == TFTeam_Red)
+		{
+			if (!g_SpyHasDoneTask)
+				SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime() + 2.0);
+		}
 	}
 	else
 	{
@@ -1076,7 +1093,7 @@ public Action Command_Start(int client, int args)
 
 	CPrintToChatAll("{azure}%N {honeydew}has started the match.", client);
 	
-	CreateTeamTimer(10, 900, true);
+	CreateTeamTimer(10, 90, true);
 
 	StopTimer(g_StartMatchCommand);
 	g_StartMatchCommand = CreateTimer(10.0, Timer_StartMatchCommand, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -1153,6 +1170,8 @@ void InitMatch()
 		
 		if (!IsPlayerAlive(i))
 			TF2_RespawnPlayer(i);
+		
+		TF2_RegeneratePlayer(i);
 	}
 
 	CreateTimer(0.2, Timer_PostStart, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -1187,6 +1206,11 @@ public Action Timer_PostStart(Handle timer)
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
 	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
+
+	g_SpyHasDoneTask = false;
+	StopTimer(g_UnlockSnipers);
+	g_UnlockSnipers = CreateTimer(30.0, Timer_UnlockSnipers, _, TIMER_FLAG_NO_MAPCHANGE);
+	CPrintToChat(spy, "You must wait until a spy does a priority task or 30 seconds to fire.");
 
 	int benefactor = -1;
 
@@ -1265,6 +1289,21 @@ public Action Timer_PostStart(Handle timer)
 	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Stop;
+}
+
+public Action Timer_UnlockSnipers(Handle timer)
+{
+	g_SpyHasDoneTask = true;
+	g_UnlockSnipers = null;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Red)
+		{
+			CPrintToChat(i, "The spy hasn't done a task, you can now shoot.");
+			EmitSoundToClient(i, "coach/coach_go_here.wav");
+		}
+	}
 }
 
 public Action Timer_ShotAllowed(Handle timer, any data)
@@ -1935,7 +1974,7 @@ public Action Timer_DoingTask(Handle timer, any data)
 	g_DoingTask[client] = null;
 	return Plugin_Stop;
 }
-int g_LastTime[MAXPLAYERS + 1] = {-1, ...};
+//int g_LastTime[MAXPLAYERS + 1] = {-1, ...};
 public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 {
 	if (client < 1 || client > MaxClients || !IsValidEntity(client) || !IsPlayerAlive(client))
@@ -1945,11 +1984,11 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 	if (TF2_GetClientTeam(client) == TFTeam_Red)
 	{
-		int time = GetTime();
+		/*int time = GetTime();
 
 		if (g_LastTime[client] < time)
 		{
-			g_LastTime[time] = 2;
+			g_LastTime[client] = time + 2;
 
 			for (int i = 1; i <= MaxClients; i++)
 			{
@@ -1959,7 +1998,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 					break;
 				}
 			}
-		}
+		}*/
 
 		g_TotalShots++;
 		SpeakResponseConcept(client, "TLK_FIREWEAPON");
@@ -2025,11 +2064,11 @@ public Action OnClientCommand(int client, int args)
 	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
 	
-	if (StrEqual(sCommand, "eureka_teleport", false))
+	/*if (StrEqual(sCommand, "eureka_teleport", false))
 	{
 		CPrintToChat(client, "You are not allowed to use the Eureka Effect.");
 		return Plugin_Stop;
-	}
+	}*/
 	
 	return Plugin_Continue;
 }
@@ -2059,6 +2098,7 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	StopTimer(g_LobbyTimer);
 
 	StopTimer(g_StartMatchCommand);
+	StopTimer(g_UnlockSnipers);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -2130,7 +2170,7 @@ int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255,
 	return glow;
 }
 
-void CreateTeamTimer(int setup_time = 60, int round_time = 900, bool countdown = true)
+void CreateTeamTimer(int setup_time = 60, int round_time = 90, bool countdown = true)
 {
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
@@ -2192,6 +2232,20 @@ bool IsTimerPaused()
 	return view_as<bool>(GetEntProp(entity, Prop_Send, "m_bTimerPaused"));
 }
 
+void AddTime(int time = 30)
+{
+	if (IsTimerPaused())
+		return;
+	
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		entity = CreateEntityByName("team_round_timer");
+	
+	SetVariantInt(time);
+	AcceptEntityInput(entity, "AddTime");
+}
+
 void TF2Attrib_ApplyMoveSpeedBonus(int client, float value)
 {
 	TF2Attrib_SetByName(client, "move speed bonus", 1.0 + value);
@@ -2209,7 +2263,7 @@ void InitLobby()
 	convar_AllTalk.BoolValue = true;
 
 	g_MatchState = STATE_LOBBY;
-	CreateTeamTimer(60, 900, true);
+	CreateTeamTimer(60, 90, true);
 
 	StopTimer(g_LobbyTimer);
 	g_LobbyTime = 120;
@@ -2386,7 +2440,7 @@ public Action Command_Unpause(int client, int args)
 	return Plugin_Handled;
 }
 
-bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float distance = 0.0, bool heightcheck = true, bool negativeangle = false)
+stock bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float distance = 0.0, bool heightcheck = true, bool negativeangle = false)
 {
 	if (angle > 360.0 || angle < 0.0)
 		angle = 180.0;
@@ -2441,4 +2495,16 @@ bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float dist
 	}
 	else
 		return false;
+}
+
+public Action Command_Tasks(int client, int args)
+{
+	if (TF2_GetClientTeam(client) == TFTeam_Red)
+	{
+		CPrintToChat(client, "You must be on the Blue team to use this command.");
+		return Plugin_Handled;
+	}
+
+	ShowTasksPanel(client);
+	return Plugin_Handled;
 }
