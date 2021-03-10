@@ -1088,13 +1088,31 @@ void CopyArrayToArray(const any[] array, any[] newArray, int size)
 
 public Action Command_Start(int client, int args)
 {
-	StartMatch();
-	CPrintToChat(client, "{azure}%N {honeydew}has started the match.", client);
+	StartMatch(client);
 	return Plugin_Handled;
 }
 
-void StartMatch()
+void StartMatch(int client = -1)
 {
+	int count;
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+			count++;
+	
+	if (count < 2)
+	{
+		if (client != -1)
+		{
+			CPrintToChat(client, "You cannot manually start the match unless there's two available players.");
+			EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
+		}
+		
+		return;
+	}
+
+	if (client != -1)
+		CPrintToChat(client, "{azure}%N {honeydew}has started the match.", client);
+
 	convar_AllTalk.BoolValue = false;
 
 	if (GameRules_GetProp("m_bInWaitingForPlayers"))
