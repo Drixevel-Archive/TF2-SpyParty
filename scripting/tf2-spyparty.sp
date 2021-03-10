@@ -462,7 +462,11 @@ public void OnPluginEnd()
 	}
 
 	PauseTF2Timer();
+
 	convar_RespawnWaveTime.IntValue = 10;
+	convar_AutoTeamBalance.IntValue = 0;
+	convar_TeamBalanceLimit.IntValue = 0;
+	convar_AutoScramble.IntValue = 0;
 }
 
 public void OnMapStart()
