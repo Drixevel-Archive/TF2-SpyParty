@@ -11,7 +11,6 @@
 
 #define STATE_HIBERNATION -1
 #define STATE_LOBBY 0
-#define STATE_COUNTDOWN 1
 #define STATE_PLAYING 2
 
 #define ACTION_GIVE 0
@@ -79,9 +78,6 @@ int g_LockdownTime = -1;
 
 bool g_IsChangingClasses[MAXPLAYERS + 1];
 int g_LastChangedClass[MAXPLAYERS + 1] = {-1, ...};
-
-int g_Countdown;
-Handle g_CountdownTimer;
 
 bool g_IsSpy[MAXPLAYERS + 1];
 bool g_IsBenefactor[MAXPLAYERS + 1];
@@ -488,7 +484,6 @@ public void OnMapEnd()
 	g_MatchState = STATE_HIBERNATION;
 
 	g_LobbyTimer = null;
-	g_CountdownTimer = null;
 	g_GiveTasksTimer = null;
 
 	convar_RespawnWaveTime.IntValue = 10;
@@ -869,8 +864,6 @@ void GetMatchStateName(char[] buffer, int size)
 		case STATE_HIBERNATION:
 			strcopy(buffer, size, "Hibernation");
 		case STATE_LOBBY:
-			strcopy(buffer, size, "Waiting");
-		case STATE_COUNTDOWN:
 			strcopy(buffer, size, "Starting");
 		case STATE_PLAYING:
 			strcopy(buffer, size, "Live");
@@ -1080,26 +1073,12 @@ void StartMatch(int client = -1)
 	g_LobbyTime = 0;
 	StopTimer(g_LobbyTimer);
 
-	g_MatchState = STATE_COUNTDOWN;
-
-	CreateTF2Timer(5);
-
-	g_Countdown = 5;
-	StopTimer(g_CountdownTimer);
-	g_CountdownTimer = CreateTimer(1.0, Timer_CountdownTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	InitMatch();
 }
 
-public Action Timer_CountdownTick(Handle timer)
+void InitMatch()
 {
-	g_Countdown--;
-
-	if (g_Countdown > 0)
-		return Plugin_Continue;
-
 	g_LockdownTime = -1;
-
-	g_Countdown = 0;
-	g_CountdownTimer = null;
 
 	g_MatchState = STATE_PLAYING;
 	PrintHintTextToAll("Match has started.");
@@ -1146,7 +1125,6 @@ public Action Timer_CountdownTick(Handle timer)
 	}
 
 	CreateTimer(0.2, Timer_PostStart, _, TIMER_FLAG_NO_MAPCHANGE);
-	return Plugin_Stop;
 }
 
 public Action Timer_PostStart(Handle timer)
@@ -1247,7 +1225,6 @@ public Action Timer_PostStart(Handle timer)
 	}
 
 	convar_RespawnWaveTime.IntValue = 99999;
-	CreateTF2Timer(900);
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
 	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
@@ -2039,9 +2016,6 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	convar_AllTalk.BoolValue = true;
 	g_MatchState = STATE_HIBERNATION;
 
-	g_Countdown = 0;
-	StopTimer(g_CountdownTimer);
-
 	g_LobbyTime = 0;
 	StopTimer(g_LobbyTimer);
 
@@ -2115,15 +2089,40 @@ int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255,
 	return glow;
 }
 
-void CreateTF2Timer(int timer)
+stock void CreateTeamTimer(int setup_time = 120, int round_time = 900)
 {
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
 	if (!IsValidEntity(entity))
 		entity = CreateEntityByName("team_round_timer");
+	
+	char sSetup[32];
+	IntToString(setup_time, sSetup, sizeof(sSetup));
+	
+	char sRound[32];
+	IntToString(round_time, sRound, sizeof(sRound));
+	
+	DispatchKeyValue(entity, "reset_time", "1");
+	DispatchKeyValue(entity, "setup_length", sSetup);
+	DispatchKeyValue(entity, "timer_length", sRound);
+	DispatchKeyValue(entity, "auto_countdown", "1");
+	DispatchSpawn(entity);
 
+	AcceptEntityInput(entity, "Resume");
+
+	SetVariantInt(1);
+	AcceptEntityInput(entity, "ShowInHUD");
+}
+
+stock void CreateTF2Timer(int timer, bool countdown = false)
+{
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		entity = CreateEntityByName("team_round_timer");
+	
 	char sTime[32];
-	IntToString(timer, sTime, sizeof(sTime));
+	IntToString(timer + 1, sTime, sizeof(sTime));
 	
 	DispatchKeyValue(entity, "reset_time", "1");
 	DispatchKeyValue(entity, "auto_countdown", "0");
@@ -2189,7 +2188,7 @@ void InitLobby()
 	convar_AllTalk.BoolValue = true;
 
 	g_MatchState = STATE_LOBBY;
-	CreateTF2Timer(120);
+	CreateTeamTimer();
 
 	StopTimer(g_LobbyTimer);
 	g_LobbyTime = 120;
