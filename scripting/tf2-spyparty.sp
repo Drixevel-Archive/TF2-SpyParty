@@ -2129,7 +2129,9 @@ stock void CreateTF2Timer(int timer, bool countdown = false)
 	IntToString(timer + 1, sTime, sizeof(sTime));
 	
 	DispatchKeyValue(entity, "reset_time", "1");
-	DispatchKeyValue(entity, "auto_countdown", "0");
+	DispatchKeyValue(entity, "show_time_remaining", "1");
+	DispatchKeyValue(entity, "setup_length", "10");
+	DispatchKeyValue(entity, "auto_countdown", countdown ? "1" : "0");
 	DispatchKeyValue(entity, "timer_length", sTime);
 	DispatchSpawn(entity);
 
