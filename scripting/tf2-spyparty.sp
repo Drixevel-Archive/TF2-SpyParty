@@ -195,10 +195,15 @@ public void OnPluginStart()
 		{
 			g_OnWeaponFire = DHookCreate(offset, HookType_Entity, ReturnType_Void, ThisPointer_CBaseEntity, OnMyWeaponFired);
 			DHookAddParam(g_OnWeaponFire, HookParamType_Int);
+			LogError("Gamedata Hooked: CBasePlayer::OnMyWeaponFired");
 		}
-		
+		else
+			LogError("Error while parsing Gamedata: CBasePlayer::OnMyWeaponFired");
+
 		delete config;
 	}
+	else
+		LogError("Error while parsing Gamedata File: tf2.spyparty.txt");
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
