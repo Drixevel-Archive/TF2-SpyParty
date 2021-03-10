@@ -578,6 +578,9 @@ void OnSpawn(int client)
 
 			case TFTeam_Blue:
 			{
+				if (TF2_GetPlayerClass(client) == TFClass_Spy)
+					TF2_SetPlayerClass(client, GetRandomClass());
+				
 				TF2_RegeneratePlayer(client);
 
 				EquipWeaponSlot(client, TFWeaponSlot_Melee);
@@ -611,6 +614,21 @@ void OnSpawn(int client)
 		InitLobby();
 
 	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
+}
+
+TFClassType GetRandomClass()
+{
+	TFClassType class[7];
+
+	class[0] = TFClass_Scout;
+	class[1] = TFClass_Soldier;
+	class[2] = TFClass_DemoMan;
+	class[3] = TFClass_Medic;
+	class[4] = TFClass_Heavy;
+	class[5] = TFClass_Pyro;
+	class[6] = TFClass_Engineer;
+
+	return class[GetRandomInt(0, 6)];
 }
 
 public Action OnTransmitGlow(int entity, int client)
@@ -1072,6 +1090,8 @@ public Action Timer_StartMatchCommand(Handle timer, any data)
 	StartMatch();
 }
 
+void StartMatch()
+{
 	convar_AllTalk.BoolValue = false;
 
 	if (GameRules_GetProp("m_bInWaitingForPlayers"))
@@ -1701,8 +1721,6 @@ void OpenClassChangeMenu(int client)
 	menu.AddItem("6", "Heavy");
 	menu.AddItem("9", "Engineer");
 	menu.AddItem("5", "Medic");
-	menu.AddItem("2", "Sniper");
-	menu.AddItem("8", "Spy");
 
 	menu.Display(client, MENU_TIME_FOREVER);
 }
