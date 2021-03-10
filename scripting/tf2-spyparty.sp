@@ -578,7 +578,7 @@ void OnSpawn(int client)
 
 			case TFTeam_Blue:
 			{
-				if (TF2_GetPlayerClass(client) == TFClass_Spy)
+				if (TF2_GetPlayerClass(client) == TFClass_Spy || TF2_GetPlayerClass(client) == TFClass_Sniper)
 					TF2_SetPlayerClass(client, GetRandomClass());
 				
 				TF2_RegeneratePlayer(client);
@@ -1185,6 +1185,9 @@ public Action Timer_PostStart(Handle timer)
 		AcceptEntityInput(g_GlowEnt[spy], "SetGlowColor");
 	}
 
+	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
+	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
+
 	int benefactor = -1;
 
 	if (TF2_GetTeamClientCount(TFTeam_Blue) > 4)
@@ -1256,9 +1259,6 @@ public Action Timer_PostStart(Handle timer)
 	}
 
 	convar_RespawnWaveTime.IntValue = 99999;
-
-	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
-	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
 
 	g_GiveTasks = GetRandomInt(60, 80);
 	StopTimer(g_GiveTasksTimer);
@@ -1935,7 +1935,7 @@ public Action Timer_DoingTask(Handle timer, any data)
 	g_DoingTask[client] = null;
 	return Plugin_Stop;
 }
-
+int g_LastTime[MAXPLAYERS + 1] = {-1, ...};
 public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 {
 	if (client < 1 || client > MaxClients || !IsValidEntity(client) || !IsPlayerAlive(client))
@@ -1945,12 +1945,19 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 	if (TF2_GetClientTeam(client) == TFTeam_Red)
 	{
-		for (int i = 1; i <= MaxClients; i++)
+		int time = GetTime();
+
+		if (g_LastTime[client] < time)
 		{
-			if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 5.0, 0.0, true, false))
+			g_LastTime[time] = 2;
+
+			for (int i = 1; i <= MaxClients; i++)
 			{
-				SDKHooks_TakeDamage(i, 0, client, 1000.0);
-				break;
+				if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 5.0, 0.0, true, false))
+				{
+					SDKHooks_TakeDamage(i, 0, client, 1000.0);
+					break;
+				}
 			}
 		}
 
@@ -2123,7 +2130,7 @@ int TF2_CreateGlow(const char[] name, int target, int color[4] = {255, 255, 255,
 	return glow;
 }
 
-void CreateTeamTimer(int setup_time = 120, int round_time = 900, bool countdown = true)
+void CreateTeamTimer(int setup_time = 60, int round_time = 900, bool countdown = true)
 {
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
@@ -2202,7 +2209,7 @@ void InitLobby()
 	convar_AllTalk.BoolValue = true;
 
 	g_MatchState = STATE_LOBBY;
-	CreateTeamTimer(120, 900, true);
+	CreateTeamTimer(60, 900, true);
 
 	StopTimer(g_LobbyTimer);
 	g_LobbyTime = 120;
