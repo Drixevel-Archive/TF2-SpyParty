@@ -696,6 +696,8 @@ stock int TF2_GiveItem(int client, char[] classname, int index, TF2Quality quali
 	if (StrContains(sClass, "tf_weapon_", false) == 0)
 		EquipPlayerWeapon(client, weapon);
 	
+	SetEntProp(weapon, Prop_Send, "m_bValidatedAttachedEntity", 1);
+	
 	return weapon;
 }
 
@@ -1496,7 +1498,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 		SDKHook(entity, SDKHook_EndTouch, OnTouchTriggerEnd);
 	}
 
-	if (StrContains(classname, "ammo", false) != -1)
+	if (StrContains(classname, "ammo", false) != -1 || StrEqual(classname, "tf_dropped_weapon", false))
 		SDKHook(entity, SDKHook_Spawn, OnBlockSpawn);
 	
 	if (StrEqual(classname, "env_sniperdot") && g_cvarLaserEnabled.BoolValue)
@@ -1504,6 +1506,8 @@ public void OnEntityCreated(int entity, const char[] classname)
 	
 	if (StrEqual(classname, "func_button", false))
 		SDKHook(entity, SDKHook_OnTakeDamage, OnButtonUse);
+	
+	PrintToServer(classname);
 }
 
 public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -1515,12 +1519,14 @@ public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& dama
 
 	if (StrEqual(sName, "lockdown", false))
 	{
+		if (g_MatchState != STATE_PLAYING)
+			return Plugin_Stop;
+		
 		if (g_LockdownTime > time)
 		{
 			EmitGameSoundToClient(attacker, "Player.DenyWeaponSelection");
 			CPrintToChat(attacker, "You must wait another {azure}%i {honeydew} seconds to start another lockdown.", g_LockdownTime - time);
-			damage = 0.0;
-			return Plugin_Changed;
+			return Plugin_Stop;
 		}
 
 		g_LockdownTime = time + 300;
