@@ -186,10 +186,10 @@ public void OnPluginStart()
 
 	g_Hud = CreateHudSynchronizer();
 
-	Handle config;
-	if ((config = LoadGameConfigFile("tf2.spyparty")) != null)
+	GameData config;
+	if ((config = new GameData("tf2.spyparty")) != null)
 	{
-		int offset = GameConfGetOffset(config, "CBasePlayer::OnMyWeaponFired");
+		int offset = config.GetOffset("CBasePlayer::OnMyWeaponFired");
 		
 		if (offset != -1)
 		{
