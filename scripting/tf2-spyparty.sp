@@ -1133,10 +1133,7 @@ public Action Timer_CountdownTick(Handle timer)
 	g_Countdown--;
 
 	if (g_Countdown > 0)
-	{
-		PrintHintTextToAll("Match Starting in... %i", g_Countdown);
 		return Plugin_Continue;
-	}
 
 	g_LockdownTime = -1;
 
