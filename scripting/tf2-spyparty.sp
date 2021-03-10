@@ -2035,6 +2035,12 @@ public Action OnClientCommand(int client, int args)
 	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
 	
+	if (StrEqual(sCommand, "eureka_teleport", false))
+	{
+		CPrintToChat(client, "You are not allowed to use the Eureka Effect.");
+		return Plugin_Stop;
+	}
+	
 	return Plugin_Continue;
 }
 
