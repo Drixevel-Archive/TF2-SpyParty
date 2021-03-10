@@ -301,7 +301,7 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 		return Plugin_Changed;
 	}
 
-	if (attacker > 0 && attacker <= MaxClients && GetClientTeam(victim) != GetClientTeam(attacker))
+	if (attacker > 0 && attacker <= MaxClients && GetClientTeam(attacker) == 3 && GetClientTeam(victim) != GetClientTeam(attacker))
 	{
 		damage = 0.0;
 		return Plugin_Changed;
