@@ -171,6 +171,11 @@ public void OnPluginStart()
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
 	RegAdminCmd("sm_setqueuepoints", Command_SetQueuePoints, ADMFLAG_ROOT, "Set your own or somebody else's queue points.");
 
+	RegAdminCmd("sm_pause", Command_Pause, ADMFLAG_ROOT, "Pause the timer.");
+	RegAdminCmd("sm_pausetimer", Command_Pause, ADMFLAG_ROOT, "Pause the timer.");
+	RegAdminCmd("sm_unpause", Command_Unpause, ADMFLAG_ROOT, "Unpause the timer.");
+	RegAdminCmd("sm_unpausetimer", Command_Unpause, ADMFLAG_ROOT, "Unpause the timer.");
+
 	HookEvent("player_spawn", Event_OnPlayerSpawn);
 	HookEvent("player_changeclass", Event_OnPlayerChangeClass);
 	HookEvent("player_death", Event_OnPlayerDeath);
@@ -2200,6 +2205,9 @@ void CreateTF2Timer(int timer)
 
 void PauseTF2Timer()
 {
+	if (IsTimerPaused())
+		return;
+	
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
 	if (!IsValidEntity(entity))
@@ -2208,14 +2216,27 @@ void PauseTF2Timer()
 	AcceptEntityInput(entity, "Pause");
 }
 
-stock void UnpauseTF2Timer()
+void UnpauseTF2Timer()
 {
+	if (!IsTimerPaused())
+		return;
+	
 	int entity = FindEntityByClassname(-1, "team_round_timer");
 
 	if (!IsValidEntity(entity))
 		entity = CreateEntityByName("team_round_timer");
 	
 	AcceptEntityInput(entity, "Resume");
+}
+
+bool IsTimerPaused()
+{
+	int entity = FindEntityByClassname(-1, "team_round_timer");
+
+	if (!IsValidEntity(entity))
+		return false;
+	
+	return view_as<bool>(GetEntProp(entity, Prop_Send, "m_bTimerPaused"));
 }
 
 void TF2Attrib_ApplyMoveSpeedBonus(int client, float value)
@@ -2254,14 +2275,21 @@ public Action Timer_StartMatch(Handle timer)
 	
 	if (count < 3)
 	{
-		PauseTF2Timer();
-		UpdateHudAll();
+		if (!IsTimerPaused())
+		{
+			PauseTF2Timer();
+			UpdateHudAll();
+		}
+
 		return Plugin_Continue;
 	}
 	else
 	{
-		UnpauseTF2Timer();
-		UpdateHudAll();
+		if (IsTimerPaused())
+		{
+			UnpauseTF2Timer();
+			UpdateHudAll();
+		}
 	}
 	
 	g_LobbyTime--;
@@ -2387,4 +2415,18 @@ void TF2_CreateAnnotation(int client, float[3] origin, const char[] text, float 
 	event.SetString("show_effect", "0");
 	event.SetString("show_distance", "0");
 	event.Fire(false);
+}
+
+public Action Command_Pause(int client, int args)
+{
+	PauseTF2Timer();
+	CPrintToChatAll("{azure}%N {honeydew}has paused the timer.", client);
+	return Plugin_Handled;
+}
+
+public Action Command_Unpause(int client, int args)
+{
+	UnpauseTF2Timer();
+	CPrintToChatAll("{azure}%N {honeydew}has resumed the timer.", client);
+	return Plugin_Handled;
 }
