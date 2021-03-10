@@ -1926,7 +1926,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 90.0, 0.0, true, false))
+			if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 5.0, 0.0, true, false))
 			{
 				SDKHooks_TakeDamage(i, 0, client, 1000.0);
 				break;
@@ -2400,9 +2400,10 @@ bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float dist
 	{
 		if(distance > 0)
 		{
-			if(!heightcheck)
+			if (!heightcheck)
 				resultdistance = GetVectorDistance(clientpos, targetpos);
-			if(distance >= resultdistance)
+			
+			if (distance >= resultdistance)
 				return true;
 			else
 				return false;
