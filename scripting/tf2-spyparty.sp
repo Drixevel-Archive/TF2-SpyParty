@@ -69,8 +69,6 @@ enum TF2Quality {
 
 int g_GlowSprite;
 
-int g_IsAimingAt[MAXPLAYERS + 1] = {-1, ...};
-
 Handle g_Hud;
 int g_MatchState = STATE_HIBERNATION;
 
@@ -881,73 +879,36 @@ void GetMatchStateName(char[] buffer, int size)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
-	if (TF2_GetClientTeam(client) == TFTeam_Red)
+	if (g_MatchState == STATE_PLAYING)
 	{
-		int active = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-
-		if (g_MatchState == STATE_PLAYING)
+		if (TF2_GetClientTeam(client) == TFTeam_Blue)
 		{
-			if (TF2_IsPlayerInCondition(client, TFCond_Zoomed))
+			for (int i = 0; i < g_RequiredTasks[client].Length; i++)
 			{
-				SetEntPropFloat(active, Prop_Send, "m_flChargedDamage", g_IsAimingAt[client] != -1 ? 150.0 : 1.0);
+				int task = g_RequiredTasks[client].Get(i);
 
-				float origin[3];
-				if (GetClientLookOrigin(client, origin, false, 35.0))
-				{
-					//CreatePointGlow(origin, 0.95, 0.5, 50);
+				if (task == -1)
+					continue;
+				
+				int entity = FindEntityByName(g_Tasks[task].trigger, "trigger_multiple");
 
-					float origin2[3];
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetClientTeam(client) == GetClientTeam(i))
-							continue;
-						
-						GetClientAbsOrigin(i, origin2);
-
-						if (GetVectorDistance(origin, origin2) >= 250.0)
-						{
-							if (g_IsAimingAt[client] == i)
-								g_IsAimingAt[client] = -1;
-							
-							continue;
-						}
-						
-						if (g_IsAimingAt[client] == -1)
-							g_IsAimingAt[client] = i;
-					}
-				}
+				if (!IsValidEntity(entity))
+					continue;
+				
+				float vecDestStart[3]; float vecDestEnd[3];
+				GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
+				Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
 			}
-			else
-				g_IsAimingAt[client] = -1;
-		}
-		else
-		{
-			SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime() + 999.0);
 		}
 	}
-
-	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) == TFTeam_Blue)
+	else
 	{
-		for (int i = 0; i < g_RequiredTasks[client].Length; i++)
-		{
-			int task = g_RequiredTasks[client].Get(i);
-
-			if (task == -1)
-				continue;
-			
-			int entity = FindEntityByName(g_Tasks[task].trigger, "trigger_multiple");
-
-			if (!IsValidEntity(entity))
-				continue;
-			
-			float vecDestStart[3]; float vecDestEnd[3];
-			GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
-			Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
-		}
+		if (TF2_GetClientTeam(client) == TFTeam_Red)
+			SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime() + 999.0);
 	}
 }
 
-bool GetClientLookOrigin(int client, float pOrigin[3], bool filter_players = true, float distance = 35.0)
+stock bool GetClientLookOrigin(int client, float pOrigin[3], bool filter_players = true, float distance = 35.0)
 {
 	if (client == 0 || client > MaxClients || !IsClientInGame(client))
 		return false;
@@ -1975,10 +1936,13 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 	if (TF2_GetClientTeam(client) == TFTeam_Red)
 	{
-		if (g_IsAimingAt[client] != -1)
+		for (int i = 1; i <= MaxClients; i++)
 		{
-			SDKHooks_TakeDamage(g_IsAimingAt[client], 0, client, 1000.0);
-			g_IsAimingAt[client] = -1;
+			if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 90.0, 0.0, true, false))
+			{
+				SDKHooks_TakeDamage(i, 0, client, 1000.0);
+				break;
+			}
 		}
 
 		g_TotalShots++;
@@ -2398,4 +2362,60 @@ public Action Command_Unpause(int client, int args)
 	UnpauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has resumed the timer.", client);
 	return Plugin_Handled;
+}
+
+bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float distance = 0.0, bool heightcheck = true, bool negativeangle = false)
+{
+	if (angle > 360.0 || angle < 0.0)
+		angle = 180.0;
+	
+	float anglevector[3];
+	GetClientEyeAngles(client, anglevector);
+	
+	anglevector[0] = anglevector[2] = 0.0;
+	
+	GetAngleVectors(anglevector, anglevector, NULL_VECTOR, NULL_VECTOR);
+	NormalizeVector(anglevector, anglevector);
+	
+	if (negativeangle)
+		NegateVector(anglevector);
+	
+	float clientpos[3];
+	GetClientAbsOrigin(client, clientpos);
+	
+	float targetpos[3];
+	
+	if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
+		GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", targetpos);
+	else
+		GetClientAbsOrigin(entity, targetpos);
+	
+	float resultdistance;
+	if (heightcheck && distance > 0)
+		resultdistance = GetVectorDistance(clientpos, targetpos);
+	
+	clientpos[2] = targetpos[2] = 0.0;
+	
+	float targetvector[3];
+	MakeVectorFromPoints(clientpos, targetpos, targetvector);
+	NormalizeVector(targetvector, targetvector);
+	
+	float resultangle = RadToDeg(ArcCosine(GetVectorDotProduct(targetvector, anglevector)));
+	
+	if (resultangle <= angle / 2)	
+	{
+		if(distance > 0)
+		{
+			if(!heightcheck)
+				resultdistance = GetVectorDistance(clientpos, targetpos);
+			if(distance >= resultdistance)
+				return true;
+			else
+				return false;
+		}
+		else
+			return true;
+	}
+	else
+		return false;
 }
