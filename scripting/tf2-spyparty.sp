@@ -234,6 +234,10 @@ public Action Command_Spy(int client, int args)
 
 public void OnConfigsExecuted()
 {
+	FindConVar("sv_alltalk").Flags = FindConVar("sv_alltalk").Flags &= ~FCVAR_NOTIFY;
+	FindConVar("mp_respawnwavetime").Flags = FindConVar("mp_respawnwavetime").Flags &= ~FCVAR_NOTIFY;
+	FindConVar("sv_tags").Flags = FindConVar("sv_tags").Flags &= ~FCVAR_NOTIFY;
+
 	convar_RespawnWaveTime.IntValue = 10;
 	convar_AutoTeamBalance.IntValue = 0;
 	convar_TeamBalanceLimit.IntValue = 0;
