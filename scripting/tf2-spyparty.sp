@@ -17,6 +17,7 @@
 
 /*****************************/
 //Includes
+
 #include <sourcemod>
 #include <sdkhooks>
 #include <dhooks>
