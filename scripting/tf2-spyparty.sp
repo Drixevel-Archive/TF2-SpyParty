@@ -1289,6 +1289,7 @@ void StartMatch()
 	g_Match.spawnertimer = GetRandomFloat(20.0, 25.0);
 	StopTimer(g_Match.spawner);
 	g_Match.spawner = CreateTimer(g_Match.spawnertimer, Timer_SpawnNPCs, _, TIMER_FLAG_NO_MAPCHANGE);
+	TriggerTimer(g_Match.spawner, true);
 
 	InitMatch();
 }
