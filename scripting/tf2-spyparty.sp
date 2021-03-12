@@ -1762,9 +1762,18 @@ public Action OnTouchTriggerStart(int entity, int other)
 			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
 			return;
 		}
+
+		if (TF2_GetClientTeam(other) == TFTeam_Red)
+		{
+			CPrintToChat(other, "You must be on the {azure}BLUE {honeydew}team to change your class here.");
+			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
+			return;
+		}
 		
 		g_IsChangingClasses[other] = true;
-		OpenClassChangeMenu(other);
+		//OpenClassChangeMenu(other);
+
+		ShowVGUIPanel(other, GetClientTeam(other) == 3 ? "class_blue" : "class_red");
 		return;
 	}
 
@@ -1779,7 +1788,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
 }
 
-void OpenClassChangeMenu(int client)
+stock void OpenClassChangeMenu(int client)
 {
 	Menu menu = new Menu(MenuHandler_ClassChange);
 	menu.SetTitle("Pick a class:");
@@ -1854,7 +1863,6 @@ public Action OnTouchTriggerEnd(int entity, int other)
 	if (StrEqual(sName, "changing_room", false))
 	{
 		g_IsChangingClasses[other] = false;
-		CancelClientMenu(other);
 		return;
 	}
 
@@ -2088,6 +2096,49 @@ public Action OnClientCommand(int client, int args)
 {
 	char sCommand[32];
 	GetCmdArg(0, sCommand, sizeof(sCommand));
+
+	if (StrEqual(sCommand, "joinclass", false))
+	{
+		char sValue[32];
+		GetCmdArg(1, sValue, sizeof(sValue));
+		//PrintToChat(client, "value: %s", sValue);
+
+		if (g_IsChangingClasses[client])
+		{
+			switch (TF2_GetClientTeam(client))
+			{
+				case TFTeam_Red:
+				{
+					CPrintToChat(client, "You must be on the {azure}BLUE {honeydew}team to change your class here.");
+					EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
+					return Plugin_Stop;
+				}
+
+				case TFTeam_Blue:
+				{
+					if (StrEqual(sValue, "spy", false) || StrEqual(sValue, "sniper", false))
+					{
+						CPrintToChat(client, "You are not allowed to change your class to {azure}%s {honeydew}.", sValue);
+						EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
+						return Plugin_Stop;
+					}
+					
+					int health = GetClientHealth(client);
+					TFClassType class = TF2_GetClass(sValue);
+					TF2_SetPlayerClass(client, class, false, true);
+					TF2_RegeneratePlayer(client);
+					SetEntityHealth(client, health);
+					OnSpawn(client);
+
+					g_LastChangedClass[client] = GetTime() + 30;
+					CPrintToChat(client, "You have switched your class to {azure}%s{honeydew}.", sValue);
+					g_IsChangingClasses[client] = false;
+				}
+			}
+
+			return Plugin_Stop;
+		}
+	}
 
 	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
