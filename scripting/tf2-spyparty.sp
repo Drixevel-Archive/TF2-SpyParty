@@ -174,6 +174,8 @@ public void OnPluginStart()
 	if (TheNavMesh) { }
 	CSetPrefix("{darkblue}[{azure}SpyParty{darkblue}]{honeydew}");
 
+	LoadTranslations("common.phrases");
+
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
 	convar_Glows = CreateConVar("sm_spyparty_glows", "0", "Enable glows for players?", FCVAR_NOTIFY, true, 1.0);
