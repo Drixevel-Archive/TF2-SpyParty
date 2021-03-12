@@ -584,10 +584,10 @@ void OnSpawn(int client)
 
 				int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 
-				if (!IsValidEntity(weapon) || IsValidEntity(weapon) && GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") != 14)
+				if (!IsValidEntity(weapon) || IsValidEntity(weapon) && GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") != 526)
 				{
 					TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
-					TF2_GiveItem(client, "tf_weapon_sniperrifle", 14, TF2Quality_Normal, 0, "");
+					TF2_GiveItem(client, "tf_weapon_sniperrifle", 526, TF2Quality_Normal, 0, "");
 				}
 
 				EquipWeaponSlot(client, TFWeaponSlot_Primary);
