@@ -1303,13 +1303,10 @@ void InitMatch()
 	int total = TF2_GetTeamClientCount(TFTeam_Red);
 	int balance = RoundToFloor(count * convar_TeamBalance.FloatValue);
 
-	//CPrintToChatAll("count: %i balance: %i - total: %i", count, balance, total);
-
 	if (total < balance)
 	{
 		balance -= total;
-		//CPrintToChatAll("moving %i...", balance);
-		
+
 		int moved; int failsafe; int client;
 		while (moved < balance && failsafe < MaxClients)
 		{
