@@ -107,7 +107,6 @@ enum struct Match
 	bool spyhasdonetask;
 	Handle unlocksnipers;
 
-	Handle startmatchcommand;
 	bool ispaused;
 
 	float spawnertimer;
@@ -371,7 +370,6 @@ public void OnMapEnd()
 
 	g_Match.lobbytimer = null;
 	g_Match.givetaskstimer = null;
-	g_Match.startmatchcommand = null;
 	g_Match.unlocksnipers = null;
 
 	convar_RespawnWaveTime.IntValue = 10;
@@ -1259,19 +1257,9 @@ public Action Command_Start(int client, int args)
 	}
 
 	CPrintToChatAll("{azure}%N {honeydew}has started the match.", client);
-	
 	CreateTeamTimer(10, 90, true);
 
-	StopTimer(g_Match.startmatchcommand);
-	g_Match.startmatchcommand = CreateTimer(10.0, Timer_StartMatchCommand, _, TIMER_FLAG_NO_MAPCHANGE);
-
 	return Plugin_Handled;
-}
-
-public Action Timer_StartMatchCommand(Handle timer, any data)
-{
-	g_Match.startmatchcommand = null;
-	StartMatch();
 }
 
 public void OnSetupStart(const char[] output, int caller, int activator, float delay)
@@ -2106,7 +2094,6 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 	g_Match.lobbytime = 0;
 	StopTimer(g_Match.lobbytimer);
 
-	StopTimer(g_Match.startmatchcommand);
 	StopTimer(g_Match.unlocksnipers);
 
 	g_Match.spawnertimer = 0.0;
