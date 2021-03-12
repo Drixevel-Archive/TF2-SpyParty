@@ -95,6 +95,8 @@ int g_LockdownTime = -1;
 
 enum struct Player
 {
+	int index;
+
 	bool changeclass;
 	int lastchangedclass;
 
@@ -115,6 +117,12 @@ enum struct Player
 	Handle doingtask;
 
 	bool ismarked;
+
+	void Init(int client)
+	{
+		this.index = client;
+	}
+
 }
 
 Player g_Player[MAXPLAYERS + 1];
@@ -225,6 +233,9 @@ public void OnPluginStart()
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
+		if (IsClientConnected(i))
+			OnClientConnected(i);
+		
 		if (!IsClientInGame(i))
 			continue;
 		
@@ -289,6 +300,11 @@ public void OnConfigsExecuted()
 	convar_AutoScramble.IntValue = 0;
 
 	convar_AllTalk.BoolValue = true;
+}
+
+public void OnClientConnected(int client)
+{
+	g_Player[client].Init(client);
 }
 
 public void OnClientAuthorized(int client, const char[] auth)
