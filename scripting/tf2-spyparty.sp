@@ -50,6 +50,8 @@ ConVar convar_AutoScramble;
 /*****************************/
 //Globals
 
+Database g_Database;
+
 char sModels[10][PLATFORM_MAX_PATH] =
 {
 	"",
@@ -193,6 +195,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_startmatch", Command_Start, ADMFLAG_ROOT, "Start the match.");
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
+
 	RegAdminCmd("sm_setqueuepoints", Command_SetQueuePoints, ADMFLAG_ROOT, "Set your own or somebody else's queue points.");
 
 	RegAdminCmd("sm_pause", Command_Pause, ADMFLAG_ROOT, "Pause the timer.");
@@ -256,6 +259,22 @@ public void OnPluginStart()
 		pPath[i] = PathFollower(_, Path_FilterIgnoreActors, Path_FilterOnlyActors);
 	
 	RegAdminCmd("sm_spawnnpc", Command_SpawnNPC, ADMFLAG_ROOT, "Manually spawn an NPC.");
+
+	Database.Connect(OnSQLConnect, "default");
+}
+
+public void OnSQLConnect(Database db, const char[] error, any data)
+{
+	if (db == null)
+		ThrowError("Error while connecting to database: %s", error);
+	
+	g_Database = db;
+	LogMessage("Connected to database successfully.");
+
+	char auth[64];
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientAuthorized(i) && GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth)))
+			OnClientAuthorized(i, auth);
 }
 
 public Action Command_Spy(int client, int args)
@@ -281,9 +300,44 @@ public void OnConfigsExecuted()
 	convar_AllTalk.BoolValue = true;
 }
 
-public void OnClientConnected(int client)
+public void OnClientAuthorized(int client, const char[] auth)
 {
 	g_QueuePoints[client] = 0;
+
+	if (IsFakeClient(client) || g_Database == null)
+		return;
+	
+	char sQuery[256];
+	g_Database.Format(sQuery, sizeof(sQuery), "SELECT points FROM `spyparty_points` WHERE auth = '%s';", auth);
+	g_Database.Query(OnParsePoints, sQuery, GetClientUserId(client));
+}
+
+public void OnParsePoints(Database db, DBResultSet results, const char[] error, any data)
+{
+	int client;
+	if ((client = GetClientOfUserId(data)) == 0)
+		return;
+	
+	if (results == null)
+		ThrowError("Error while parsing points: %s", error);
+	
+	if (results.FetchRow())
+		g_QueuePoints[client] = results.FetchInt(0);
+	else
+	{
+		char auth[64];
+		GetClientAuthId(client, AuthId_Steam2, auth, sizeof(auth));
+
+		char sQuery[256];
+		g_Database.Format(sQuery, sizeof(sQuery), "INSERT INTO `spyparty_points` (auth) VALUES ('%s');", auth);
+		g_Database.Query(OnInsertPoints, sQuery);
+	}
+}
+
+public void OnInsertPoints(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (results == null)
+		ThrowError("Error while inserting points: %s", error);
 }
 
 public void OnClientPutInServer(int client)
@@ -305,6 +359,25 @@ public void OnClientDisconnect(int client)
 {
 	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
 		AcceptEntityInput(g_GlowEnt[client], "Kill");
+	
+	SaveQueuePoints(client);
+}
+
+void SaveQueuePoints(int client)
+{
+	char auth[64];
+	if (g_Database != null && GetClientAuthId(client, AuthId_Steam2, auth, sizeof(auth)))
+	{
+		char sQuery[256];
+		g_Database.Format(sQuery, sizeof(sQuery), "UPDATE `spyparty_points` SET points = '%i' WHERE auth = '%s';", g_QueuePoints[client], auth);
+		g_Database.Query(OnSavePoints, sQuery);
+	}
+}
+
+public void OnSavePoints(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (results == null)
+		ThrowError("Error while saving points: %s", error);
 }
 
 public void OnClientDisconnect_Post(int client)
@@ -1181,6 +1254,7 @@ void InitMatch()
 				TF2_ChangeClientTeam(client, TFTeam_Red);
 				TF2_RespawnPlayer(client);
 				g_QueuePoints[client] = 0;
+				SaveQueuePoints(client);
 				moved++;
 			}
 			else
@@ -1194,7 +1268,10 @@ void InitMatch()
 			continue;
 		
 		if (TF2_GetClientTeam(i) == TFTeam_Blue)
+		{
 			g_QueuePoints[i]++;
+			SaveQueuePoints(i);
+		}
 		
 		if (!IsPlayerAlive(i))
 			TF2_RespawnPlayer(i);
@@ -2423,6 +2500,8 @@ public Action Command_SetQueuePoints(int client, int args)
 	int points = StringToInt(sPoints);
 
 	g_QueuePoints[target] = points;
+	SaveQueuePoints(target);
+	
 	UpdateHud(target);
 
 	if (client == target)
