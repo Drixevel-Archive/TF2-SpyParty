@@ -34,6 +34,7 @@
 
 ConVar convar_TeamBalance;
 ConVar convar_GivenTasks;
+ConVar convar_Glows;
 
 ConVar g_cvarLaserEnabled;
 ConVar g_cvarLaserRandom;
@@ -173,6 +174,7 @@ public void OnPluginStart()
 
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	convar_GivenTasks = CreateConVar("sm_spyparty_giventasks", "2", "How many tasks do players get per tick?", FCVAR_NOTIFY, true, 1.0);
+	convar_Glows = CreateConVar("sm_spyparty_glows", "0", "Enable glows for players?", FCVAR_NOTIFY, true, 1.0);
 
 	g_cvarLaserEnabled = CreateConVar("sm_spyparty_laser_enabled", "0", "Sniper rifles emit lasers", _, true, 0.0, true, 1.0);
 	g_cvarLaserRandom = CreateConVar("sm_spyparty_laser_random_color", "0", "Sniper laser use random color?", _, true, 0.0, true, 1.0);
@@ -635,7 +637,8 @@ void OnSpawn(int client)
 					if (GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
 						TF2_RemoveWearable(client, entity);
 
-				g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
+				if (convar_Glows.BoolValue)
+					g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
 				
 				if (IsValidEntity(g_GlowEnt[client]))
 					SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
