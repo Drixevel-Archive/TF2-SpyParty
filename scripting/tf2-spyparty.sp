@@ -112,8 +112,6 @@ enum struct Match
 
 Match g_Match;
 
-Handle g_OnWeaponFire;
-
 enum struct Player
 {
 	int index;
@@ -184,7 +182,10 @@ enum struct Tasks
 Tasks g_Tasks[32];
 int g_TotalTasks;
 
+Handle g_OnWeaponFire;
+
 PathFollower pPath[MAX_NPCS];
+int g_NPCTask[MAX_NPCS];
 
 /*****************************/
 //Plugin Info
@@ -388,7 +389,7 @@ public void OnClientPutInServer(int client)
 public void OnClientDisconnect(int client)
 {
 	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
-		AcceptEntityInput(g_Player[client].glowent, "Kill");
+		RemoveEntity(g_Player[client].glowent);
 	
 	SaveQueuePoints(client);
 }
@@ -635,7 +636,7 @@ public void OnPluginEnd()
 			ClearSyncHud(i, g_Match.hud);
 
 		if (IsPlayerAlive(i) && g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
-			AcceptEntityInput(g_Player[i].glowent, "Kill");
+			RemoveEntity(g_Player[i].glowent);
 	}
 
 	PauseTF2Timer();
@@ -704,7 +705,7 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	
 	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
 	{
-		AcceptEntityInput(g_Player[client].glowent, "Kill");
+		RemoveEntity(g_Player[client].glowent);
 		g_Player[client].glowent = -1;
 	}
 	
@@ -918,7 +919,7 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	
 	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
 	{
-		AcceptEntityInput(g_Player[client].glowent, "Kill");
+		RemoveEntity(g_Player[client].glowent);
 		g_Player[client].glowent = -1;
 	}
 	
@@ -2200,7 +2201,7 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 			if (g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
 			{
-				AcceptEntityInput(g_Player[i].glowent, "Kill");
+				RemoveEntity(g_Player[i].glowent);
 				g_Player[i].glowent = -1;
 			}
 		}
@@ -2687,7 +2688,7 @@ void GetMiddleOfABox(const float vec1[3], const float vec2[3], float buffer[3])
 public Action Timer_DestroyNPC(Handle timer, any data)
 {
 	int entity = data;
-	AcceptEntityInput(entity, "Kill");
+	RemoveEntity(entity);
 }
 
 int GetRandomTask()
