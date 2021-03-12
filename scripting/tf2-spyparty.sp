@@ -1775,8 +1775,6 @@ public Action OnTouchTriggerStart(int entity, int other)
 		}
 		
 		g_Player[other].changeclass = true;
-		//OpenClassChangeMenu(other);
-
 		ShowVGUIPanel(other, GetClientTeam(other) == 3 ? "class_blue" : "class_red");
 		return;
 	}
@@ -1790,56 +1788,6 @@ public Action OnTouchTriggerStart(int entity, int other)
 	
 	if (HasTask(other, task))
 		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
-}
-
-stock void OpenClassChangeMenu(int client)
-{
-	Menu menu = new Menu(MenuHandler_ClassChange);
-	menu.SetTitle("Pick a class:");
-
-	menu.AddItem("1", "Scout");
-	menu.AddItem("3", "Soldier");
-	menu.AddItem("7", "Pyro");
-	menu.AddItem("4", "Demoman");
-	menu.AddItem("6", "Heavy");
-	menu.AddItem("9", "Engineer");
-	menu.AddItem("5", "Medic");
-
-	menu.Display(client, MENU_TIME_FOREVER);
-}
-
-public int MenuHandler_ClassChange(Menu menu, MenuAction action, int param1, int param2)
-{
-	switch (action)
-	{
-		case MenuAction_Select:
-		{
-			if (!g_Player[param1].changeclass)
-				return;
-			
-			int time = GetTime();
-
-			if (g_Player[param1].lastchangedclass > time)
-			{
-				CPrintToChat(param1, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_Player[param1].lastchangedclass - time);
-				EmitGameSoundToClient(param1, "Player.DenyWeaponSelection");
-				return;
-			}
-			
-			char sInfo[32]; char sName[32];
-			menu.GetItem(param2, sInfo, sizeof(sInfo), _, sName, sizeof(sName));
-
-			TFClassType class = view_as<TFClassType>(StringToInt(sInfo));
-			TF2_SetPlayerClass(param1, class, false, true);
-			OnSpawn(param1);
-
-			g_Player[param1].lastchangedclass = time + 30;
-			CPrintToChat(param1, "You have switched your class to {azure}%s{honeydew}.", g_Player[param1].lastchangedclass - time, sName);
-		}
-		
-		case MenuAction_End:
-			delete menu;
-	}
 }
 
 public Action OnTouchTrigger(int entity, int other)
