@@ -2504,6 +2504,12 @@ void SpawnNPC()
 	float vecMaxs[3] = {1.0, 1.0, 90.0};
 	npc.SetBodyMins(vecMins);
 	npc.SetBodyMaxs(vecMaxs);
+
+	npc.iHealth = 100;
+	npc.iMaxHealth = 100;
+
+	npc.SetBodyMins(view_as<float>({-1.0, -1.0, 0.0}));
+	npc.SetBodyMaxs(view_as<float>({1.0, 1.0, 90.0}));
 	
 	int iSequence = npcEntity.SelectWeightedSequence(ACT_MP_STAND_MELEE);
 	if (iSequence != -1)
