@@ -2500,8 +2500,8 @@ void SpawnNPC()
 	npc.flRunSpeed = 300.0;
 	npc.flDeathDropHeight = 2000.0;
 
-	npc.iHealth = 100;
-	npc.iMaxHealth = 100;
+	npc.iHealth = 200;
+	npc.iMaxHealth = 200;
 
 	npc.SetBodyMins(view_as<float>({-1.0, -1.0, 0.0}));
 	npc.SetBodyMaxs(view_as<float>({1.0, 1.0, 90.0}));
