@@ -82,6 +82,8 @@ enum TF2Quality {
 };
 
 int g_GlowSprite;
+int g_LaserSprite;
+int g_HaloSprite;
 
 Handle g_Hud;
 int g_MatchState = STATE_HIBERNATION;
@@ -144,9 +146,6 @@ int g_SpyTask;
 
 bool g_SpyHasDoneTask;
 Handle g_UnlockSnipers;
-
-int g_iLaserMaterial;
-int g_iHaloMaterial;
 
 Handle g_StartMatchCommand;
 bool g_IsPaused;
@@ -569,16 +568,14 @@ public void OnPluginEnd()
 
 public void OnMapStart()
 {
-	g_GlowSprite = PrecacheModel("sprites/blueglow2.vmt");
+	g_GlowSprite = PrecacheModel("materials/sprites/blueglow2.vmt");
+	g_LaserSprite = PrecacheModel("materials/sprites/laserbeam.vmt");
+	g_HaloSprite = PrecacheModel("materials/sprites/halo01.vmt");
 
 	PrecacheSound("coach/coach_go_here.wav");
 	PrecacheSound("coach/coach_defend_here.wav");
 	PrecacheSound("coach/coach_look_here.wav");
-
 	PrecacheSound("ambient/alarms/doomsday_lift_alarm.wav");
-
-	g_iLaserMaterial = PrecacheModel("materials/sprites/laserbeam.vmt");
-	g_iHaloMaterial = PrecacheModel("materials/sprites/halo01.vmt");
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -1010,7 +1007,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 				
 				float vecDestStart[3]; float vecDestEnd[3];
 				GetAbsBoundingBox(entity, vecDestStart, vecDestEnd);
-				Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_iLaserMaterial, g_iHaloMaterial, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
+				Effect_DrawBeamBoxToClient(client, vecDestStart, vecDestEnd, g_LaserSprite, g_HaloSprite, 30, 30, 0.5, 2.0, 2.0, 1, 5.0, {0, 191, 255, 120}, 0);
 			}
 		}
 		else if (TF2_GetClientTeam(client) == TFTeam_Red)
