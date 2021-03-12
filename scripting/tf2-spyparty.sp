@@ -109,6 +109,9 @@ enum struct Match
 
 	Handle startmatchcommand;
 	bool ispaused;
+
+	float spawnertimer;
+	Handle spawner;
 }
 
 Match g_Match;
@@ -357,6 +360,7 @@ public void OnMapStart()
 	PrecacheSound("passtime/ball_catch.wav");
 	PrecacheSound("player/pl_scout_dodge_can_drink.wav");
 	PrecacheSound("npc/headcrab/headcrab_burning_loop2.wav");
+	PrecacheSound("doors/default_locked.wav");
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -674,7 +678,7 @@ public void Event_OnPlayerChangeClass(Event event, const char[] name, bool dontB
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
 	
-	UpdateHud(client);
+	OnSpawn(client);
 }
 
 public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -783,6 +787,14 @@ void OnSpawn(int client)
 		InitLobby();
 
 	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
+	CreateTimer(0.2, Timer_SetHealth, GetClientUserId(client));
+}
+
+public Action Timer_SetHealth(Handle timer, any data)
+{
+	int client;
+	if ((client = GetClientOfUserId(data)) > 0 && IsClientInGame(client) && IsPlayerAlive(client))
+		SetEntityHealth(client, GetEntProp(GetPlayerResourceEntity(), Prop_Send, "m_iMaxHealth", _, client));
 }
 
 TFClassType GetRandomClass()
@@ -1140,7 +1152,7 @@ public bool TraceEntityFilterNone(int entity, int contentsMask, any data)
 	return entity != data;
 }
 
-stock void CreatePointGlow(float origin[3], float time = 0.95, float size = 0.5, int brightness = 50)
+stock void CreatePointGlow(float origin[3], float time = 30.0, float size = 0.5, int brightness = 50)
 {
 	TE_SetupGlowSprite(origin, g_GlowSprite, time, size, brightness);
 	TE_SendToAll();
@@ -1285,6 +1297,10 @@ void StartMatch()
 	
 	g_Match.lobbytime = 0;
 	StopTimer(g_Match.lobbytimer);
+
+	g_Match.spawnertimer = GetRandomFloat(20.0, 25.0);
+	StopTimer(g_Match.spawner);
+	g_Match.spawner = CreateTimer(g_Match.spawnertimer, Timer_SpawnNPCs, _, TIMER_FLAG_NO_MAPCHANGE);
 
 	InitMatch();
 }
@@ -2039,11 +2055,9 @@ public Action OnClientCommand(int client, int args)
 						return Plugin_Stop;
 					}
 					
-					int health = GetClientHealth(client);
 					TFClassType class = TF2_GetClass(sValue);
 					TF2_SetPlayerClass(client, class, false, true);
 					TF2_RegeneratePlayer(client);
-					SetEntityHealth(client, health);
 					OnSpawn(client);
 
 					g_Player[client].lastchangedclass = GetTime() + 30;
@@ -2094,6 +2108,9 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 	StopTimer(g_Match.startmatchcommand);
 	StopTimer(g_Match.unlocksnipers);
+
+	g_Match.spawnertimer = 0.0;
+	StopTimer(g_Match.spawner);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -2468,10 +2485,7 @@ void SpawnNPC()
 	int point = GetBotSpawnPoint();
 
 	if (point < 1)
-	{
-		PrintToChatAll("not found point");
 		return;
-	}
 
 	float vecOrigin[3];
 	GetEntPropVector(point, Prop_Send, "m_vecOrigin", vecOrigin);
@@ -2479,15 +2493,14 @@ void SpawnNPC()
 	CBaseNPC npc = new CBaseNPC();
 	
 	if (npc == INVALID_NPC)
-	{
-		PrintToChatAll("Failed to create npc!");
 		return;
-	}
 	
 	CBaseCombatCharacter npcEntity = CBaseCombatCharacter(npc.GetEntity());
 	npcEntity.Spawn();
 	npcEntity.Teleport(vecOrigin);
 	npcEntity.SetModel(sModels[GetRandomInt(1, 9)]);
+
+	SetEntProp(npcEntity.iEnt, Prop_Send, "m_nSkin",  1);
 	
 	SDKHook(npcEntity.iEnt, SDKHook_Think, Hook_NPCThink);
 	
@@ -2511,6 +2524,22 @@ void SpawnNPC()
 		SetEntPropFloat(npcEntity.iEnt, Prop_Data, "m_flCycle", 0.0);
 	}
 
+	EmitSoundToAll("doors/default_locked.wav", npcEntity.iEnt);
+
+	CreateTimer(1.0, Timer_SendToTask, npc.GetEntity());
+}
+
+public Action Timer_SendToTask(Handle timer, any data)
+{
+	int entity = -1;
+	if ((entity = EntRefToEntIndex(data)) == -1)
+		return;
+	
+	CBaseNPC npc = TheNPCs.FindNPCByEntIndex(entity);
+
+	if (npc == INVALID_NPC)
+		return;
+
 	int task = GetRandomTask();
 
 	if (!IsValidEntity(task))
@@ -2522,12 +2551,49 @@ void SpawnNPC()
 	GetAbsBoundingBox(task, fStart, fEnd);
 	GetMiddleOfABox(fStart, fEnd, fMiddle);
 
-	//fMiddle[2] += 10.0;
+	fMiddle[2] += 10.0;
 	pPath[npc.Index].ComputeToPos(npc.GetBot(), fMiddle, 9999999999.0);
 	pPath[npc.Index].SetMinLookAheadDistance(300.0);
-	PrintToChatAll("Pathing %i to task %i.", npcEntity.iEnt, task);
 
-	CreateTimer(20.0, Timer_DestroyNPC, npcEntity.iEnt);
+	CreateTimer(20.0, Timer_NPCLeave, npc.GetEntity(), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_NPCLeave(Handle timer, any data)
+{
+	int entity = -1;
+	if ((entity = EntRefToEntIndex(data)) == -1)
+		return;
+	
+	CBaseNPC npc = TheNPCs.FindNPCByEntIndex(entity);
+
+	if (npc == INVALID_NPC)
+		return;
+	
+	int point = GetBotSpawnPoint();
+
+	if (point < 1)
+		return;
+	
+	float vecOrigin[3];
+	GetEntPropVector(point, Prop_Send, "m_vecOrigin", vecOrigin);
+	
+	g_NPCTask[npc.Index] = 0;
+
+	vecOrigin[2] += 10.0;
+	pPath[npc.Index].ComputeToPos(npc.GetBot(), vecOrigin, 9999999999.0);
+	pPath[npc.Index].SetMinLookAheadDistance(300.0);
+
+	CreateTimer(20.0, Timer_DestroyNPC, npc.GetEntity(), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_DestroyNPC(Handle timer, any data)
+{
+	int entity = -1;
+	if ((entity = EntRefToEntIndex(data)) == -1)
+		return;
+
+	EmitSoundToAll("doors/default_locked.wav", entity);
+	RemoveEntity(entity);
 }
 
 void GetMiddleOfABox(const float vec1[3], const float vec2[3], float buffer[3])
@@ -2540,12 +2606,6 @@ void GetMiddleOfABox(const float vec1[3], const float vec2[3], float buffer[3])
 	mid[2] /= 2.0;
 
 	AddVectors(vec1, mid, buffer);
-}
-
-public Action Timer_DestroyNPC(Handle timer, any data)
-{
-	int entity = data;
-	RemoveEntity(entity);
 }
 
 int GetRandomTask()
@@ -2699,4 +2759,15 @@ public void OnTimerSpawnPost(int entity)
 {
 	HookSingleEntityOutput(entity, "OnSetupStart", OnSetupStart);
 	HookSingleEntityOutput(entity, "OnSetupFinished", OnSetupFinished);
+}
+
+public Action Timer_SpawnNPCs(Handle timer)
+{
+	for (int i = 0; i < GetRandomInt(2, 3); i++)
+		SpawnNPC();
+
+	g_Match.spawnertimer = GetRandomFloat(20.0, 25.0);
+	g_Match.spawner = CreateTimer(g_Match.spawnertimer, Timer_SpawnNPCs, _, TIMER_FLAG_NO_MAPCHANGE);
+
+	return Plugin_Stop;
 }
