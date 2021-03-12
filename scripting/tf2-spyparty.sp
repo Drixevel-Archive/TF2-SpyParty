@@ -1667,7 +1667,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 		SDKHook(entity, SDKHook_EndTouch, OnTouchTriggerEnd);
 	}
 
-	if (StrContains(classname, "ammo", false) != -1 || StrEqual(classname, "tf_dropped_weapon", false))
+	if (StrContains(classname, "tf_ammo_pack", false) != -1 || StrEqual(classname, "tf_dropped_weapon", false) || StrEqual(classname, "item_currencypack_custom", false))
 		SDKHook(entity, SDKHook_Spawn, OnBlockSpawn);
 	
 	if (StrEqual(classname, "func_button", false))
