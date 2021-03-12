@@ -91,15 +91,31 @@ Handle g_LobbyTimer;
 
 int g_LockdownTime = -1;
 
-bool g_IsChangingClasses[MAXPLAYERS + 1];
-int g_LastChangedClass[MAXPLAYERS + 1] = {-1, ...};
+enum struct Player
+{
+	bool changeclass;
+	int lastchangedclass;
 
-bool g_IsSpy[MAXPLAYERS + 1];
-bool g_IsBenefactor[MAXPLAYERS + 1];
+	bool isspy;
+	bool isbenefactor;
 
-int g_BenefactorNoises[MAXPLAYERS + 1];
+	int benefactornoises;
+	int lastrefilled;
 
-int g_LastRefilled[MAXPLAYERS + 1] = {-1, ...};
+	ArrayList requiredtasks;
+
+	int neartask;
+	int glowent;
+
+	int queuepoints;
+
+	float tasktimer;
+	Handle doingtask;
+
+	bool ismarked;
+}
+
+Player g_Player[MAXPLAYERS + 1];
 
 enum struct Tasks
 {
@@ -116,9 +132,6 @@ enum struct Tasks
 Tasks g_Tasks[32];
 int g_TotalTasks;
 
-ArrayList g_RequiredTasks[MAXPLAYERS + 1];
-int g_NearTask[MAXPLAYERS + 1] = {-1, ...};
-
 int g_TotalTasksEx;
 int g_TotalShots;
 
@@ -127,8 +140,6 @@ Handle g_OnWeaponFire;
 int g_GiveTasks;
 Handle g_GiveTasksTimer;
 
-int g_GlowEnt[MAXPLAYERS + 1] = {-1, ...};
-
 int g_SpyTask;
 
 bool g_SpyHasDoneTask;
@@ -136,13 +147,6 @@ Handle g_UnlockSnipers;
 
 int g_iLaserMaterial;
 int g_iHaloMaterial;
-
-int g_QueuePoints[MAXPLAYERS + 1];
-
-float g_TaskTimer[MAXPLAYERS + 1];
-Handle g_DoingTask[MAXPLAYERS + 1];
-
-bool g_IsMarked[MAXPLAYERS + 1];
 
 Handle g_StartMatchCommand;
 bool g_IsPaused;
@@ -268,7 +272,7 @@ public void OnSQLConnect(Database db, const char[] error, any data)
 public Action Command_Spy(int client, int args)
 {
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && g_IsSpy[i])
+		if (IsClientInGame(i) && g_Player[i].isspy)
 			CPrintToChat(client, "{azure}%N {honeydew}is currently a spy!", i);
 	
 	return Plugin_Handled;
@@ -290,7 +294,7 @@ public void OnConfigsExecuted()
 
 public void OnClientAuthorized(int client, const char[] auth)
 {
-	g_QueuePoints[client] = 0;
+	g_Player[client].queuepoints = 0;
 
 	if (IsFakeClient(client) || g_Database == null)
 		return;
@@ -310,7 +314,7 @@ public void OnParsePoints(Database db, DBResultSet results, const char[] error, 
 		ThrowError("Error while parsing points: %s", error);
 	
 	if (results.FetchRow())
-		g_QueuePoints[client] = results.FetchInt(0);
+		g_Player[client].queuepoints = results.FetchInt(0);
 	else
 	{
 		char auth[64];
@@ -332,8 +336,8 @@ public void OnClientPutInServer(int client)
 {
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 
-	delete g_RequiredTasks[client];
-	g_RequiredTasks[client] = new ArrayList();
+	delete g_Player[client].requiredtasks;
+	g_Player[client].requiredtasks = new ArrayList();
 
 	if (g_OnWeaponFire != null)
 		DHookEntity(g_OnWeaponFire, true, client);
@@ -341,8 +345,8 @@ public void OnClientPutInServer(int client)
 
 public void OnClientDisconnect(int client)
 {
-	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
-		AcceptEntityInput(g_GlowEnt[client], "Kill");
+	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
+		AcceptEntityInput(g_Player[client].glowent, "Kill");
 	
 	SaveQueuePoints(client);
 }
@@ -353,7 +357,7 @@ void SaveQueuePoints(int client)
 	if (g_Database != null && GetClientAuthId(client, AuthId_Steam2, auth, sizeof(auth)))
 	{
 		char sQuery[256];
-		g_Database.Format(sQuery, sizeof(sQuery), "UPDATE `spyparty_points` SET points = '%i' WHERE auth = '%s';", g_QueuePoints[client], auth);
+		g_Database.Format(sQuery, sizeof(sQuery), "UPDATE `spyparty_points` SET points = '%i' WHERE auth = '%s';", g_Player[client].queuepoints, auth);
 		g_Database.Query(OnSavePoints, sQuery);
 	}
 }
@@ -366,23 +370,23 @@ public void OnSavePoints(Database db, DBResultSet results, const char[] error, a
 
 public void OnClientDisconnect_Post(int client)
 {
-	g_IsSpy[client] = false;
-	g_IsBenefactor[client] = false;
-	g_IsMarked[client] = false;
+	g_Player[client].isspy = false;
+	g_Player[client].isbenefactor = false;
+	g_Player[client].ismarked = false;
 
-	g_BenefactorNoises[client] = 0;
+	g_Player[client].benefactornoises = 0;
 
-	g_LastRefilled[client] = -1;
+	g_Player[client].lastrefilled = -1;
 
-	delete g_RequiredTasks[client];
-	g_NearTask[client] = -1;
+	delete g_Player[client].requiredtasks;
+	g_Player[client].neartask = -1;
 
-	g_GlowEnt[client] = -1;
+	g_Player[client].glowent = -1;
 
-	g_QueuePoints[client] = 0;
+	g_Player[client].queuepoints = 0;
 
-	g_IsChangingClasses[client] = false;
-	g_LastChangedClass[client] = -1;
+	g_Player[client].changeclass = false;
+	g_Player[client].lastchangedclass = -1;
 }
 
 public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -426,13 +430,13 @@ void ParseTasks()
 
 void AddTask(int client, int task)
 {
-	if (g_IsSpy[client] && GetRandomInt(0, 10) > 2)
+	if (g_Player[client].isspy && GetRandomInt(0, 10) > 2)
 		task = g_SpyTask;
 	
-	if (g_RequiredTasks[client].FindValue(task) != -1)
+	if (g_Player[client].requiredtasks.FindValue(task) != -1)
 		task = GetRandomInt(0, g_TotalTasks - 1);
 	
-	g_RequiredTasks[client].Push(task);
+	g_Player[client].requiredtasks.Push(task);
 	CPrintToChat(client, "You have been given the task: {azure}%s", g_Tasks[task].name);
 	UpdateHud(client);
 
@@ -444,14 +448,14 @@ bool CompleteTask(int client, int task)
 	if (!HasTask(client, task))
 		return false;
 	
-	int index = g_RequiredTasks[client].FindValue(task);
-	g_RequiredTasks[client].Erase(index);
+	int index =g_Player[client].requiredtasks.FindValue(task);
+	g_Player[client].requiredtasks.Erase(index);
 
 	CPrintToChat(client, "You have completed the task: {azure}%s", g_Tasks[task].name);
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
-	if (g_IsSpy[client] && task == g_SpyTask)
+	if (g_Player[client].isspy && task == g_SpyTask)
 	{
 		EmitSoundToAll("coach/coach_look_here.wav");
 
@@ -479,12 +483,12 @@ bool CompleteTask(int client, int task)
 
 int GetTasksCount(int client)
 {
-	return g_RequiredTasks[client].Length;
+	return g_Player[client].requiredtasks.Length;
 }
 
 bool HasTask(int client, int task)
 {
-	if (g_RequiredTasks[client].FindValue(task) != -1)
+	if (g_Player[client].requiredtasks.FindValue(task) != -1)
 		return true;
 	
 	return false;
@@ -551,8 +555,8 @@ public void OnPluginEnd()
 		if (!IsFakeClient(i))
 			ClearSyncHud(i, g_Hud);
 
-		if (IsPlayerAlive(i) && g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
-			AcceptEntityInput(g_GlowEnt[i], "Kill");
+		if (IsPlayerAlive(i) && g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
+			AcceptEntityInput(g_Player[i].glowent, "Kill");
 	}
 
 	PauseTF2Timer();
@@ -614,10 +618,10 @@ public Action Timer_DelaySpawn(Handle timer, any data)
 	if ((client = GetClientOfUserId(data)) == 0)
 		return Plugin_Stop;
 	
-	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
 	{
-		AcceptEntityInput(g_GlowEnt[client], "Kill");
-		g_GlowEnt[client] = -1;
+		AcceptEntityInput(g_Player[client].glowent, "Kill");
+		g_Player[client].glowent = -1;
 	}
 	
 	OnSpawn(client);
@@ -690,10 +694,10 @@ void OnSpawn(int client)
 						TF2_RemoveWearable(client, entity);
 
 				if (convar_Glows.BoolValue)
-					g_GlowEnt[client] = TF2_CreateGlow("blue_glow", client);
+					g_Player[client].glowent = TF2_CreateGlow("blue_glow", client);
 				
-				if (IsValidEntity(g_GlowEnt[client]))
-					SDKHook(g_GlowEnt[client], SDKHook_SetTransmit, OnTransmitGlow);
+				if (IsValidEntity(g_Player[client].glowent))
+					SDKHook(g_Player[client].glowent, SDKHook_SetTransmit, OnTransmitGlow);
 				
 				TF2Attrib_RemoveMoveSpeedBonus(client);
 			}
@@ -828,25 +832,25 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 	if ((client = GetClientOfUserId(event.GetInt("userid"))) == 0)
 		return;
 	
-	if (g_GlowEnt[client] > 0 && IsValidEntity(g_GlowEnt[client]))
+	if (g_Player[client].glowent > 0 && IsValidEntity(g_Player[client].glowent))
 	{
-		AcceptEntityInput(g_GlowEnt[client], "Kill");
-		g_GlowEnt[client] = -1;
+		AcceptEntityInput(g_Player[client].glowent, "Kill");
+		g_Player[client].glowent = -1;
 	}
 	
 	if (TF2_GetClientTeam(client) != TFTeam_Blue || g_MatchState != STATE_PLAYING)
 		return;
 	
-	if (g_IsSpy[client])
+	if (g_Player[client].isspy)
 	{
 		CPrintToChatAll("{azure}%N {honeydew}was a spy and has died!", client);
 		TF2_SetPlayerClass(client, TFClass_Spy);
-		g_IsSpy[client] = false;
+		g_Player[client].isspy = false;
 	}
-	else if (g_IsBenefactor[client])
+	else if (g_Player[client].isbenefactor)
 	{
 		CPrintToChatAll("{ancient}%N {honeydew}was a benefactor and has died!", client);
-		g_IsBenefactor[client] = false;
+		g_Player[client].isbenefactor = false;
 	}
 	else
 	{
@@ -885,7 +889,7 @@ public Action Timer_CheckDeath(Handle timer)
 		
 		count = 0;
 		for (int i = 1; i <= MaxClients; i++)
-			if (g_IsSpy[i])
+			if (g_Player[i].isspy)
 				count++;
 		
 		if (count < 1)
@@ -960,7 +964,7 @@ void UpdateHud(int client)
 		FormatEx(sWarning, sizeof(sWarning), "(Requires 3 players to start)");
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s (Queue Points: %i)\n%s%s%s", sMatchState, g_QueuePoints[client], sTeamHud, sTotalTasks, sWarning);
+	ShowSyncHudText(client, g_Hud, "Match State: %s (Queue Points: %i)\n%s%s%s", sMatchState, g_Player[client].queuepoints, sTeamHud, sTotalTasks, sWarning);
 }
 
 int GetMaxTasks()
@@ -992,9 +996,9 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	{
 		if (TF2_GetClientTeam(client) == TFTeam_Blue)
 		{
-			for (int i = 0; i < g_RequiredTasks[client].Length; i++)
+			for (int i = 0; i < g_Player[client].requiredtasks.Length; i++)
 			{
-				int task = g_RequiredTasks[client].Get(i);
+				int task = g_Player[client].requiredtasks.Get(i);
 
 				if (task == -1)
 					continue;
@@ -1230,7 +1234,7 @@ void InitMatch()
 			{
 				TF2_ChangeClientTeam(client, TFTeam_Red);
 				TF2_RespawnPlayer(client);
-				g_QueuePoints[client] = 0;
+				g_Player[client].queuepoints = 0;
 				SaveQueuePoints(client);
 				moved++;
 			}
@@ -1246,7 +1250,7 @@ void InitMatch()
 		
 		if (TF2_GetClientTeam(i) == TFTeam_Blue)
 		{
-			g_QueuePoints[i]++;
+			g_Player[i].queuepoints++;
 			SaveQueuePoints(i);
 		}
 		
@@ -1270,11 +1274,11 @@ public Action Timer_PostStart(Handle timer)
 		return Plugin_Stop;
 	}
 	
-	g_IsSpy[spy] = true;
+	g_Player[spy].isspy = true;
 	PrintCenterText(spy, "YOU ARE THE SPY!");
 	EmitSoundToClient(spy, "coach/coach_look_here.wav");
 
-	if (IsValidEntity(g_GlowEnt[spy]))
+	if (IsValidEntity(g_Player[spy].glowent))
 	{
 		int color[4];
 		color[0] = 0;
@@ -1283,7 +1287,7 @@ public Action Timer_PostStart(Handle timer)
 		color[3] = 255;
 		
 		SetVariantColor(color);
-		AcceptEntityInput(g_GlowEnt[spy], "SetGlowColor");
+		AcceptEntityInput(g_Player[spy].glowent, "SetGlowColor");
 	}
 
 	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
@@ -1301,11 +1305,11 @@ public Action Timer_PostStart(Handle timer)
 
 	if (benefactor != -1)
 	{
-		g_IsBenefactor[benefactor] = true;
+		g_Player[benefactor].isbenefactor = true;
 		PrintCenterText(benefactor, "YOU ARE A BENEFACTOR!");
 		EmitSoundToClient(benefactor, "coach/coach_look_here.wav");
 
-		if (IsValidEntity(g_GlowEnt[benefactor]))
+		if (IsValidEntity(g_Player[benefactor].glowent))
 		{
 			int color[4];
 			color[0] = 0;
@@ -1314,13 +1318,13 @@ public Action Timer_PostStart(Handle timer)
 			color[3] = 255;
 			
 			SetVariantColor(color);
-			AcceptEntityInput(g_GlowEnt[benefactor], "SetGlowColor");
+			AcceptEntityInput(g_Player[benefactor].glowent, "SetGlowColor");
 		}
 	}
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		g_LastRefilled[i] = -1;
+		g_Player[i].lastrefilled = -1;
 
 		if (!IsClientInGame(i))
 			continue;
@@ -1352,7 +1356,7 @@ public Action Timer_PostStart(Handle timer)
 				if (benefactor != -1)
 					CPrintToChat(i, "{ancient}%N {honeydew}is a benefactor!", benefactor);
 				
-				g_RequiredTasks[i].Clear();
+				g_Player[i].requiredtasks.Clear();
 
 				for (int x = 0; x < convar_GivenTasks.IntValue; x++)
 					AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
@@ -1439,7 +1443,7 @@ public int OnSortQueue(int index1, int index2, Handle array, Handle hndl)
 	int client1 = GetArrayCell(array, index1);
 	int client2 = GetArrayCell(array, index2);
 	
-	return g_QueuePoints[client2] - g_QueuePoints[client1];
+	return g_Player[client2].queuepoints - g_Player[client1].queuepoints;
 }
 
 public Action Timer_GiveTasksTick(Handle timer)
@@ -1464,7 +1468,7 @@ public Action Timer_GiveTasksTick(Handle timer)
 	{
 		if (IsClientInGame(i) && IsPlayerAlive(i) && TF2_GetClientTeam(i) == TFTeam_Blue)
 		{
-			g_RequiredTasks[i].Clear();
+			g_Player[i].requiredtasks.Clear();
 
 			for (int x = 0; x < convar_GivenTasks.IntValue; x++)
 				AddTask(i, GetRandomInt(0, g_TotalTasks - 1));
@@ -1486,9 +1490,9 @@ void ShowTasksPanel(int client)
 	FormatEx(sDisplay, sizeof(sDisplay), "Priority Task: %s", g_Tasks[g_SpyTask].name);
 	panel.DrawText(sDisplay);
 
-	for (int i = 0; i < g_RequiredTasks[client].Length; i++)
+	for (int i = 0; i < g_Player[client].requiredtasks.Length; i++)
 	{
-		int task = g_RequiredTasks[client].Get(i);
+		int task = g_Player[client].requiredtasks.Get(i);
 		FormatEx(sDisplay, sizeof(sDisplay), "Task %i: %s", i + 1, g_Tasks[task].name);
 		panel.DrawText(sDisplay);
 	}
@@ -1546,7 +1550,7 @@ int FindBenefactor()
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue || g_IsSpy[i])
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || TF2_GetClientTeam(i) != TFTeam_Blue || g_Player[i].isspy)
 			continue;
 
 		clients[amount++] = i;
@@ -1650,14 +1654,14 @@ public Action OnTouchTriggerStart(int entity, int other)
 			return;
 		}
 
-		if (g_LastRefilled[other] > time)
+		if (g_Player[other].lastrefilled > time)
 		{
-			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to refill your sniper.", g_LastRefilled[other] - time);
+			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to refill your sniper.", g_Player[other].lastrefilled - time);
 			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
 			return;
 		}
 
-		g_LastRefilled[other] = time + 60;
+		g_Player[other].lastrefilled = time + 60;
 		EmitGameSoundToClient(other, "AmmoPack.Touch");
 		SetWeaponAmmo(other, weapon, 1);
 		
@@ -1665,9 +1669,9 @@ public Action OnTouchTriggerStart(int entity, int other)
 	}
 	else if (StrEqual(sName, "changing_room", false))
 	{
-		if (g_LastChangedClass[other] > time)
+		if (g_Player[other].lastchangedclass > time)
 		{
-			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_LastChangedClass[other] - time);
+			CPrintToChat(other, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_Player[other].lastchangedclass - time);
 			EmitGameSoundToClient(other, "Player.DenyWeaponSelection");
 			return;
 		}
@@ -1679,7 +1683,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 			return;
 		}
 		
-		g_IsChangingClasses[other] = true;
+		g_Player[other].changeclass = true;
 		//OpenClassChangeMenu(other);
 
 		ShowVGUIPanel(other, GetClientTeam(other) == 3 ? "class_blue" : "class_red");
@@ -1691,7 +1695,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 	if (task == -1 || TF2_GetClientTeam(other) != TFTeam_Blue)
 		return;
 	
-	g_NearTask[other] = task;
+	g_Player[other].neartask = task;
 	
 	if (HasTask(other, task))
 		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
@@ -1719,14 +1723,14 @@ public int MenuHandler_ClassChange(Menu menu, MenuAction action, int param1, int
 	{
 		case MenuAction_Select:
 		{
-			if (!g_IsChangingClasses[param1])
+			if (!g_Player[param1].changeclass)
 				return;
 			
 			int time = GetTime();
 
-			if (g_LastChangedClass[param1] > time)
+			if (g_Player[param1].lastchangedclass > time)
 			{
-				CPrintToChat(param1, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_LastChangedClass[param1] - time);
+				CPrintToChat(param1, "You must wait {azure}%i {honeydew}seconds to change your class again.", g_Player[param1].lastchangedclass - time);
 				EmitGameSoundToClient(param1, "Player.DenyWeaponSelection");
 				return;
 			}
@@ -1738,8 +1742,8 @@ public int MenuHandler_ClassChange(Menu menu, MenuAction action, int param1, int
 			TF2_SetPlayerClass(param1, class, false, true);
 			OnSpawn(param1);
 
-			g_LastChangedClass[param1] = time + 30;
-			CPrintToChat(param1, "You have switched your class to {azure}%s{honeydew}.", g_LastChangedClass[param1] - time, sName);
+			g_Player[param1].lastchangedclass = time + 30;
+			CPrintToChat(param1, "You have switched your class to {azure}%s{honeydew}.", g_Player[param1].lastchangedclass - time, sName);
 		}
 		
 		case MenuAction_End:
@@ -1771,16 +1775,16 @@ public Action OnTouchTriggerEnd(int entity, int other)
 
 	if (StrEqual(sName, "changing_room", false))
 	{
-		g_IsChangingClasses[other] = false;
+		g_Player[other].changeclass = false;
 		return;
 	}
 
 	int task = GetTaskByName(sName);
 
-	if (task == -1 || g_NearTask[other] != task || TF2_GetClientTeam(other) != TFTeam_Blue)
+	if (task == -1 || g_Player[other].neartask != task || TF2_GetClientTeam(other) != TFTeam_Blue)
 		return;
 	
-	g_NearTask[other] = -1;
+	g_Player[other].neartask = -1;
 }
 
 bool PushMenuInt(Menu menu, const char[] id, int value)
@@ -1828,18 +1832,18 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	
 	if (TF2_GetClientTeam(client) == TFTeam_Blue)
 	{
-		if (g_NearTask[client] != -1 && HasTask(client, g_NearTask[client]))
+		if (g_Player[client].neartask != -1 && HasTask(client, g_Player[client].neartask))
 		{
-			g_TaskTimer[client] = 10.0;
-			StopTimer(g_DoingTask[client]);
-			g_DoingTask[client] = CreateTimer(0.1, Timer_DoingTask, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+			g_Player[client].tasktimer = 10.0;
+			StopTimer(g_Player[client].doingtask);
+			g_Player[client].doingtask = CreateTimer(0.1, Timer_DoingTask, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 		}
 
 		int time = GetTime();
 
-		if (g_IsBenefactor[client] && g_BenefactorNoises[client] <= time)
+		if (g_Player[client].isbenefactor && g_Player[client].benefactornoises <= time)
 		{
-			g_BenefactorNoises[client] = time + 10;
+			g_Player[client].benefactornoises = time + 10;
 			EmitSoundToAll("coach/coach_look_here.wav");
 		}
 
@@ -1849,13 +1853,13 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	{
 		int target = GetClientAimTarget(client, true);
 
-		if (target == -1 || g_IsMarked[target])
+		if (target == -1 || g_Player[target].ismarked)
 			return Plugin_Stop;
 		
 		SpeakResponseConcept(client, "TLK_PLAYER_POSITIVE");
 		SpeakResponseConcept(target, "TLK_PLAYER_NEGATIVE");
 		
-		if (IsValidEntity(g_GlowEnt[target]))
+		if (IsValidEntity(g_Player[target].glowent))
 		{
 			int color[4];
 			color[0] = 0;
@@ -1864,9 +1868,9 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 			color[3] = 255;
 			
 			SetVariantColor(color);
-			AcceptEntityInput(g_GlowEnt[target], "SetGlowColor");
+			AcceptEntityInput(g_Player[target].glowent, "SetGlowColor");
 
-			g_IsMarked[target] = true;
+			g_Player[target].ismarked = true;
 			CreateTimer(30.0, Timer_ResetColor, target);
 		}
 
@@ -1880,7 +1884,7 @@ public Action Timer_ResetColor(Handle timer, any data)
 {
 	int client = data;
 
-	if (IsValidEntity(g_GlowEnt[client]))
+	if (IsValidEntity(g_Player[client].glowent))
 	{
 		int color[4];
 		color[0] = 255;
@@ -1889,9 +1893,9 @@ public Action Timer_ResetColor(Handle timer, any data)
 		color[3] = 255;
 		
 		SetVariantColor(color);
-		AcceptEntityInput(g_GlowEnt[client], "SetGlowColor");
+		AcceptEntityInput(g_Player[client].glowent, "SetGlowColor");
 
-		g_IsMarked[client] = false;
+		g_Player[client].ismarked = false;
 	}
 }
 
@@ -1899,24 +1903,24 @@ public Action Timer_DoingTask(Handle timer, any data)
 {
 	int client = data;
 
-	g_TaskTimer[client] -= 0.1;
+	g_Player[client].tasktimer -= 0.1;
 
-	if (g_NearTask[client] == -1)
+	if (g_Player[client].neartask == -1)
 	{
-		g_DoingTask[client] = null;
+		g_Player[client].doingtask = null;
 		return Plugin_Stop;
 	}
 
-	if (g_TaskTimer[client] > 0.0)
+	if (g_Player[client].tasktimer > 0.0)
 	{
-		PrintCenterText(client, "Doing Task... %i", RoundFloat(g_TaskTimer[client]));
+		PrintCenterText(client, "Doing Task... %i", RoundFloat(g_Player[client].tasktimer));
 		return Plugin_Continue;
 	}
 
-	CompleteTask(client, g_NearTask[client]);
-	g_NearTask[client] = -1;
+	CompleteTask(client, g_Player[client].neartask);
+	g_Player[client].neartask = -1;
 
-	g_DoingTask[client] = null;
+	g_Player[client].doingtask = null;
 	return Plugin_Stop;
 }
 //int g_LastTime[MAXPLAYERS + 1] = {-1, ...};
@@ -1958,9 +1962,9 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 			return MRES_Ignored;
 		}
 
-		if (g_LastRefilled[client] != -1)
+		if (g_Player[client].lastrefilled != -1)
 		{
-			g_LastRefilled[client] = GetTime() + 10;
+			g_Player[client].lastrefilled = GetTime() + 10;
 
 			int entity = -1; float origin[3]; char sName[32];
 			while ((entity = FindEntityByClassname(entity, "trigger_multiple")) != -1)
@@ -2012,7 +2016,7 @@ public Action OnClientCommand(int client, int args)
 		GetCmdArg(1, sValue, sizeof(sValue));
 		//PrintToChat(client, "value: %s", sValue);
 
-		if (g_IsChangingClasses[client])
+		if (g_Player[client].changeclass)
 		{
 			switch (TF2_GetClientTeam(client))
 			{
@@ -2039,9 +2043,9 @@ public Action OnClientCommand(int client, int args)
 					SetEntityHealth(client, health);
 					OnSpawn(client);
 
-					g_LastChangedClass[client] = GetTime() + 30;
+					g_Player[client].lastchangedclass = GetTime() + 30;
 					CPrintToChat(client, "You have switched your class to {azure}%s{honeydew}.", sValue);
-					g_IsChangingClasses[client] = false;
+					g_Player[client].changeclass = false;
 				}
 			}
 
@@ -2090,14 +2094,14 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		g_IsSpy[i] = false;
-		g_IsBenefactor[i] = false;
+		g_Player[i].isspy = false;
+		g_Player[i].isbenefactor = false;
 
-		g_LastRefilled[i] = -1;
+		g_Player[i].lastrefilled = -1;
 
-		if (g_RequiredTasks[i] != null)
-			g_RequiredTasks[i].Clear();
-		g_NearTask[i] = -1;
+		if (g_Player[i].requiredtasks != null)
+			g_Player[i].requiredtasks.Clear();
+		g_Player[i].neartask = -1;
 
 		if (IsClientInGame(i) && IsPlayerAlive(i))
 		{
@@ -2110,10 +2114,10 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 					TF2_RemoveCondition(i, TFCond_Slowed);
 			}
 
-			if (g_GlowEnt[i] > 0 && IsValidEntity(g_GlowEnt[i]))
+			if (g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
 			{
-				AcceptEntityInput(g_GlowEnt[i], "Kill");
-				g_GlowEnt[i] = -1;
+				AcceptEntityInput(g_Player[i].glowent, "Kill");
+				g_Player[i].glowent = -1;
 			}
 		}
 	}
@@ -2331,17 +2335,17 @@ public Action Command_SetQueuePoints(int client, int args)
 	GetCmdArg(args > 1 ? 2 : 1, sPoints, sizeof(sPoints));
 	int points = StringToInt(sPoints);
 
-	g_QueuePoints[target] = points;
+	g_Player[target].queuepoints = points;
 	SaveQueuePoints(target);
 
 	UpdateHud(target);
 
 	if (client == target)
-		CPrintToChat(client, "You have set your own queue points to {azure}%i{honeydew}.", g_QueuePoints[target]);
+		CPrintToChat(client, "You have set your own queue points to {azure}%i{honeydew}.", g_Player[target].queuepoints);
 	else
 	{
-		CPrintToChat(client, "You have set {azure}%N{honeydew}'s queue points to {azure}%i{honeydew}.", target, g_QueuePoints[target]);
-		CPrintToChat(target, "{azure}%N {honeydew}has set your queue points by {azure}%i{honeydew}.", client, g_QueuePoints[target]);
+		CPrintToChat(client, "You have set {azure}%N{honeydew}'s queue points to {azure}%i{honeydew}.", target, g_Player[target].queuepoints);
+		CPrintToChat(target, "{azure}%N {honeydew}has set your queue points by {azure}%i{honeydew}.", client, g_Player[target].queuepoints);
 	}
 
 	return Plugin_Handled;
