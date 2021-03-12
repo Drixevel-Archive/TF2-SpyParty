@@ -85,13 +85,34 @@ int g_GlowSprite;
 int g_LaserSprite;
 int g_HaloSprite;
 
-Handle g_Hud;
-int g_MatchState = STATE_HIBERNATION;
+enum struct Match
+{
+	Handle hud;
+	int matchstate;
 
-int g_LobbyTime;
-Handle g_LobbyTimer;
+	int lobbytime;
+	Handle lobbytimer;
 
-int g_LockdownTime = -1;
+	int lockdowntime;
+
+	int totaltasks;
+	int totalshots;
+
+	int givetasks;
+	Handle givetaskstimer;
+
+	int spytask;
+
+	bool spyhasdonetask;
+	Handle unlocksnipers;
+
+	Handle startmatchcommand;
+	bool ispaused;
+}
+
+Match g_Match;
+
+Handle g_OnWeaponFire;
 
 enum struct Player
 {
@@ -163,22 +184,6 @@ enum struct Tasks
 Tasks g_Tasks[32];
 int g_TotalTasks;
 
-int g_TotalTasksEx;
-int g_TotalShots;
-
-Handle g_OnWeaponFire;
-
-int g_GiveTasks;
-Handle g_GiveTasksTimer;
-
-int g_SpyTask;
-
-bool g_SpyHasDoneTask;
-Handle g_UnlockSnipers;
-
-Handle g_StartMatchCommand;
-bool g_IsPaused;
-
 PathFollower pPath[MAX_NPCS];
 
 /*****************************/
@@ -232,7 +237,7 @@ public void OnPluginStart()
 
 	AddCommandListener(Listener_VoiceMenu, "voicemenu");
 
-	g_Hud = CreateHudSynchronizer();
+	g_Match.hud = CreateHudSynchronizer();
 
 	GameData config;
 	if ((config = new GameData("tf2.spyparty")) != null)
@@ -468,7 +473,7 @@ void ParseTasks()
 void AddTask(int client, int task)
 {
 	if (g_Player[client].isspy && GetRandomInt(0, 10) > 2)
-		task = g_SpyTask;
+		task = g_Match.spytask;
 	
 	if (g_Player[client].requiredtasks.FindValue(task) != -1)
 		task = GetRandomInt(0, g_TotalTasks - 1);
@@ -529,22 +534,22 @@ bool CompleteTask(int client, int task)
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
-	if (g_Player[client].isspy && task == g_SpyTask)
+	if (g_Player[client].isspy && task == g_Match.spytask)
 	{
 		EmitSoundToAll("coach/coach_look_here.wav");
 
-		g_SpyHasDoneTask = true;
-		StopTimer(g_UnlockSnipers);
+		g_Match.spyhasdonetask = true;
+		StopTimer(g_Match.unlocksnipers);
 	}
 	
 	AddTime();
-	g_TotalTasksEx++;
+	g_Match.totaltasks++;
 
 	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i))
 			UpdateHud(i);
 
-	if (g_TotalTasksEx >= GetMaxTasks())
+	if (g_Match.totaltasks >= GetMaxTasks())
 	{
 		CPrintToChatAll("Blue team has completed all available tasks, Blue wins the round.");
 		TF2_ForceWin(TFTeam_Blue);
@@ -627,7 +632,7 @@ public void OnPluginEnd()
 			continue;
 		
 		if (!IsFakeClient(i))
-			ClearSyncHud(i, g_Hud);
+			ClearSyncHud(i, g_Match.hud);
 
 		if (IsPlayerAlive(i) && g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
 			AcceptEntityInput(g_Player[i].glowent, "Kill");
@@ -664,12 +669,12 @@ public void OnMapStart()
 
 public void OnMapEnd()
 {
-	g_MatchState = STATE_HIBERNATION;
+	g_Match.matchstate = STATE_HIBERNATION;
 
-	g_LobbyTimer = null;
-	g_GiveTasksTimer = null;
-	g_StartMatchCommand = null;
-	g_UnlockSnipers = null;
+	g_Match.lobbytimer = null;
+	g_Match.givetaskstimer = null;
+	g_Match.startmatchcommand = null;
+	g_Match.unlocksnipers = null;
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -687,7 +692,7 @@ public void Event_OnPlayerSpawn(Event event, const char[] name, bool dontBroadca
 {
 	CreateTimer(0.2, Timer_DelaySpawn, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
 
-	if (g_MatchState == STATE_HIBERNATION)
+	if (g_Match.matchstate == STATE_HIBERNATION)
 		InitLobby();
 }
 
@@ -785,7 +790,7 @@ void OnSpawn(int client)
 	else 
 		TF2_RespawnPlayer(client);
 
-	if (g_MatchState == STATE_HIBERNATION)
+	if (g_Match.matchstate == STATE_HIBERNATION)
 		InitLobby();
 
 	CreateTimer(0.2, Timer_Hud, GetClientUserId(client));
@@ -917,7 +922,7 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 		g_Player[client].glowent = -1;
 	}
 	
-	if (TF2_GetClientTeam(client) != TFTeam_Blue || g_MatchState != STATE_PLAYING)
+	if (TF2_GetClientTeam(client) != TFTeam_Blue || g_Match.matchstate != STATE_PLAYING)
 		return;
 	
 	if (g_Player[client].isspy)
@@ -946,7 +951,7 @@ public void Event_OnPlayerDeath(Event event, const char[] name, bool dontBroadca
 
 public Action Timer_CheckDeath(Handle timer)
 {
-	if (g_MatchState == STATE_PLAYING)
+	if (g_Match.matchstate == STATE_PLAYING)
 	{
 		int count;
 
@@ -1012,13 +1017,13 @@ void UpdateHud(int client)
 	GetMatchStateName(sMatchState, sizeof(sMatchState));
 
 	char sTeamHud[64];
-	if (g_MatchState == STATE_PLAYING)
+	if (g_Match.matchstate == STATE_PLAYING)
 	{
 		switch (TF2_GetClientTeam(client))
 		{
 			case TFTeam_Red, TFTeam_Spectator:
 			{
-				FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_TotalShots, GetMaxShots());
+				FormatEx(sTeamHud, sizeof(sTeamHud), "Total Shots: %i/%i", g_Match.totalshots, GetMaxShots());
 			}
 
 			case TFTeam_Blue:
@@ -1030,8 +1035,8 @@ void UpdateHud(int client)
 	}
 
 	char sTotalTasks[64];
-	if (g_MatchState == STATE_PLAYING)
-		FormatEx(sTotalTasks, sizeof(sTotalTasks), "\nTotal Tasks: %i/%i", g_TotalTasksEx, GetMaxTasks());
+	if (g_Match.matchstate == STATE_PLAYING)
+		FormatEx(sTotalTasks, sizeof(sTotalTasks), "\nTotal Tasks: %i/%i", g_Match.totaltasks, GetMaxTasks());
 	
 	int count;
 	for (int i = 1; i <= MaxClients; i++)
@@ -1039,11 +1044,11 @@ void UpdateHud(int client)
 			count++;
 
 	char sWarning[32];
-	if (count < 3 && g_MatchState == STATE_LOBBY)
+	if (count < 3 && g_Match.matchstate == STATE_LOBBY)
 		FormatEx(sWarning, sizeof(sWarning), "(Requires 3 players to start)");
 
 	SetHudTextParams(0.0, 0.0, 99999.0, 255, 255, 255, 255);
-	ShowSyncHudText(client, g_Hud, "Match State: %s (Queue Points: %i)\n%s%s%s", sMatchState, g_Player[client].queuepoints, sTeamHud, sTotalTasks, sWarning);
+	ShowSyncHudText(client, g_Match.hud, "Match State: %s (Queue Points: %i)\n%s%s%s", sMatchState, g_Player[client].queuepoints, sTeamHud, sTotalTasks, sWarning);
 }
 
 int GetMaxTasks()
@@ -1058,7 +1063,7 @@ int GetMaxTasks()
 
 void GetMatchStateName(char[] buffer, int size)
 {
-	switch (g_MatchState)
+	switch (g_Match.matchstate)
 	{
 		case STATE_HIBERNATION:
 			strcopy(buffer, size, "Hibernation");
@@ -1071,7 +1076,7 @@ void GetMatchStateName(char[] buffer, int size)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
-	if (g_MatchState == STATE_PLAYING)
+	if (g_Match.matchstate == STATE_PLAYING)
 	{
 		if (TF2_GetClientTeam(client) == TFTeam_Blue)
 		{
@@ -1094,7 +1099,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 		}
 		else if (TF2_GetClientTeam(client) == TFTeam_Red)
 		{
-			if (!g_SpyHasDoneTask)
+			if (!g_Match.spyhasdonetask)
 				SetEntPropFloat(client, Prop_Send, "m_flNextAttack", GetGameTime() + 2.0);
 		}
 	}
@@ -1256,15 +1261,15 @@ public Action Command_Start(int client, int args)
 	
 	CreateTeamTimer(10, 90, true);
 
-	StopTimer(g_StartMatchCommand);
-	g_StartMatchCommand = CreateTimer(10.0, Timer_StartMatchCommand, _, TIMER_FLAG_NO_MAPCHANGE);
+	StopTimer(g_Match.startmatchcommand);
+	g_Match.startmatchcommand = CreateTimer(10.0, Timer_StartMatchCommand, _, TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Handled;
 }
 
 public Action Timer_StartMatchCommand(Handle timer, any data)
 {
-	g_StartMatchCommand = null;
+	g_Match.startmatchcommand = null;
 	StartMatch();
 }
 
@@ -1279,21 +1284,21 @@ void StartMatch()
 		if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 			TF2_ChangeClientTeam_Alive(i, TFTeam_Blue);
 	
-	g_LobbyTime = 0;
-	StopTimer(g_LobbyTimer);
+	g_Match.lobbytime = 0;
+	StopTimer(g_Match.lobbytimer);
 
 	InitMatch();
 }
 
 void InitMatch()
 {
-	g_LockdownTime = -1;
+	g_Match.lockdowntime = -1;
 
-	g_MatchState = STATE_PLAYING;
+	g_Match.matchstate = STATE_PLAYING;
 	PrintHintTextToAll("Match has started.");
 
-	g_TotalTasksEx = 0;
-	g_TotalShots = 0;
+	g_Match.totaltasks = 0;
+	g_Match.totalshots = 0;
 	
 	int count = TF2_GetTeamClientCount(TFTeam_Blue);
 	int total = TF2_GetTeamClientCount(TFTeam_Red);
@@ -1348,7 +1353,7 @@ public Action Timer_PostStart(Handle timer)
 
 	if (spy == -1)
 	{
-		g_MatchState = STATE_LOBBY;
+		g_Match.matchstate = STATE_LOBBY;
 		CPrintToChatAll("Aborting starting match, couldn't find a spy.");
 		return Plugin_Stop;
 	}
@@ -1369,12 +1374,12 @@ public Action Timer_PostStart(Handle timer)
 		AcceptEntityInput(g_Player[spy].glowent, "SetGlowColor");
 	}
 
-	g_SpyTask = GetRandomInt(0, g_TotalTasks - 1);
-	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_SpyTask].name);
+	g_Match.spytask = GetRandomInt(0, g_TotalTasks - 1);
+	CPrintToChat(spy, "Priority Task: {aqua}%s {honeydew}(Do this task the most to win the round)", g_Tasks[g_Match.spytask].name);
 
-	g_SpyHasDoneTask = false;
-	StopTimer(g_UnlockSnipers);
-	g_UnlockSnipers = CreateTimer(30.0, Timer_UnlockSnipers, _, TIMER_FLAG_NO_MAPCHANGE);
+	g_Match.spyhasdonetask = false;
+	StopTimer(g_Match.unlocksnipers);
+	g_Match.unlocksnipers = CreateTimer(30.0, Timer_UnlockSnipers, _, TIMER_FLAG_NO_MAPCHANGE);
 	CPrintToChat(spy, "You must wait until a spy does a priority task or 30 seconds to fire.");
 
 	int benefactor = -1;
@@ -1449,17 +1454,17 @@ public Action Timer_PostStart(Handle timer)
 
 	convar_RespawnWaveTime.IntValue = 99999;
 
-	g_GiveTasks = GetRandomInt(60, 80);
-	StopTimer(g_GiveTasksTimer);
-	g_GiveTasksTimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	g_Match.givetasks = GetRandomInt(60, 80);
+	StopTimer(g_Match.givetaskstimer);
+	g_Match.givetaskstimer = CreateTimer(1.0, Timer_GiveTasksTick, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Stop;
 }
 
 public Action Timer_UnlockSnipers(Handle timer)
 {
-	g_SpyHasDoneTask = true;
-	g_UnlockSnipers = null;
+	g_Match.spyhasdonetask = true;
+	g_Match.unlocksnipers = null;
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -1527,16 +1532,16 @@ public int OnSortQueue(int index1, int index2, Handle array, Handle hndl)
 
 public Action Timer_GiveTasksTick(Handle timer)
 {
-	g_GiveTasks--;
+	g_Match.givetasks--;
 
-	if (g_GiveTasks > 0)
+	if (g_Match.givetasks > 0)
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (!IsClientInGame(i))
 				continue;
 			
-			PrintHintText(i, "Next tasks in: %i", g_GiveTasks);
+			PrintHintText(i, "Next tasks in: %i", g_Match.givetasks);
 			StopSound(i, SNDCHAN_STATIC, "UI/hint.wav");
 		}
 
@@ -1556,7 +1561,7 @@ public Action Timer_GiveTasksTick(Handle timer)
 		}
 	}
 
-	g_GiveTasks = GetRandomInt(60, 80);
+	g_Match.givetasks = GetRandomInt(60, 80);
 	return Plugin_Continue;
 }
 
@@ -1566,7 +1571,7 @@ void ShowTasksPanel(int client)
 	panel.SetTitle("Available Tasks:");
 
 	char sDisplay[128];
-	FormatEx(sDisplay, sizeof(sDisplay), "Priority Task: %s", g_Tasks[g_SpyTask].name);
+	FormatEx(sDisplay, sizeof(sDisplay), "Priority Task: %s", g_Tasks[g_Match.spytask].name);
 	panel.DrawText(sDisplay);
 
 	for (int i = 0; i < g_Player[client].requiredtasks.Length; i++)
@@ -1678,17 +1683,17 @@ public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& dama
 
 	if (StrEqual(sName, "lockdown", false))
 	{
-		if (g_MatchState != STATE_PLAYING)
+		if (g_Match.matchstate != STATE_PLAYING)
 			return Plugin_Stop;
 		
-		if (g_LockdownTime > time)
+		if (g_Match.lockdowntime > time)
 		{
 			EmitGameSoundToClient(attacker, "Player.DenyWeaponSelection");
-			CPrintToChat(attacker, "You must wait another {azure}%i {honeydew} seconds to start another lockdown.", g_LockdownTime - time);
+			CPrintToChat(attacker, "You must wait another {azure}%i {honeydew} seconds to start another lockdown.", g_Match.lockdowntime - time);
 			return Plugin_Stop;
 		}
 
-		g_LockdownTime = time + 300;
+		g_Match.lockdowntime = time + 300;
 		EmitSoundToAll("ambient/alarms/doomsday_lift_alarm.wav", victim);
 	}
 
@@ -1722,7 +1727,7 @@ public Action OnTouchTriggerStart(int entity, int other)
 
 	int time = GetTime();
 
-	if (StrEqual(sName, "refill_mag", false) && TF2_GetClientTeam(other) == TFTeam_Red && g_MatchState == STATE_PLAYING)
+	if (StrEqual(sName, "refill_mag", false) && TF2_GetClientTeam(other) == TFTeam_Red && g_Match.matchstate == STATE_PLAYING)
 	{
 		int weapon = GetEntPropEnt(other, Prop_Send, "m_hActiveWeapon");
 
@@ -1906,7 +1911,7 @@ public Action Listener_VoiceMenu(int client, const char[] command, int argc)
 	char sVoice2[32];
 	GetCmdArg(2, sVoice2, sizeof(sVoice2));
 	
-	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false) || g_MatchState != STATE_PLAYING)
+	if (!StrEqual(sVoice, "0", false) || !StrEqual(sVoice2, "0", false) || g_Match.matchstate != STATE_PLAYING)
 		return Plugin_Continue;
 	
 	if (TF2_GetClientTeam(client) == TFTeam_Blue)
@@ -2028,14 +2033,14 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 			}
 		}*/
 
-		g_TotalShots++;
+		g_Match.totalshots++;
 		SpeakResponseConcept(client, "TLK_FIREWEAPON");
 
 		for (int i = 1; i <= MaxClients; i++)
 			if (IsClientInGame(i) && TF2_GetClientTeam(i) == TFTeam_Red)
 				UpdateHud(i);
 		
-		if (g_TotalShots >= GetMaxShots())
+		if (g_Match.totalshots >= GetMaxShots())
 		{
 			CreateTimer(0.5, Timer_WeaponFirePost, _, TIMER_FLAG_NO_MAPCHANGE);
 			return MRES_Ignored;
@@ -2065,7 +2070,7 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 
 public Action Timer_WeaponFirePost(Handle timer)
 {
-	if (g_MatchState != STATE_PLAYING)
+	if (g_Match.matchstate != STATE_PLAYING)
 		return Plugin_Stop;
 	
 	CPrintToChatAll("Red team has ran out of ammunition, Blue wins the round.");
@@ -2132,7 +2137,7 @@ public Action OnClientCommand(int client, int args)
 		}
 	}
 
-	if (g_MatchState == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
+	if (g_Match.matchstate == STATE_PLAYING && TF2_GetClientTeam(client) > TFTeam_Spectator && (StrEqual(sCommand, "jointeam", false) || StrEqual(sCommand, "joinclass", false)))
 		return Plugin_Stop;
 	
 	/*if (StrEqual(sCommand, "eureka_teleport", false))
@@ -2157,19 +2162,19 @@ public void Event_OnRoundStart(Event event, const char[] name, bool dontBroadcas
 			available = true;
 	
 	if (available)
-		g_MatchState = STATE_LOBBY;
+		g_Match.matchstate = STATE_LOBBY;
 }
 
 public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	convar_AllTalk.BoolValue = true;
-	g_MatchState = STATE_HIBERNATION;
+	g_Match.matchstate = STATE_HIBERNATION;
 
-	g_LobbyTime = 0;
-	StopTimer(g_LobbyTimer);
+	g_Match.lobbytime = 0;
+	StopTimer(g_Match.lobbytimer);
 
-	StopTimer(g_StartMatchCommand);
-	StopTimer(g_UnlockSnipers);
+	StopTimer(g_Match.startmatchcommand);
+	StopTimer(g_Match.unlocksnipers);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -2201,11 +2206,11 @@ public void Event_OnRoundEnd(Event event, const char[] name, bool dontBroadcast)
 		}
 	}
 
-	g_TotalTasksEx = 0;
-	g_TotalShots = 0;
+	g_Match.totaltasks = 0;
+	g_Match.totalshots = 0;
 
-	g_GiveTasks = 0;
-	StopTimer(g_GiveTasksTimer);
+	g_Match.givetasks = 0;
+	StopTimer(g_Match.givetaskstimer);
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
@@ -2333,12 +2338,12 @@ void InitLobby()
 {
 	convar_AllTalk.BoolValue = true;
 
-	g_MatchState = STATE_LOBBY;
+	g_Match.matchstate = STATE_LOBBY;
 	CreateTeamTimer(60, 90, true);
 
-	StopTimer(g_LobbyTimer);
-	g_LobbyTime = 120;
-	g_LobbyTimer = CreateTimer(1.0, Timer_StartMatch, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	StopTimer(g_Match.lobbytimer);
+	g_Match.lobbytime = 120;
+	g_Match.lobbytimer = CreateTimer(1.0, Timer_StartMatch, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_StartMatch(Handle timer)
@@ -2353,7 +2358,7 @@ public Action Timer_StartMatch(Handle timer)
 	
 	if (count < 3)
 	{
-		if (!IsTimerPaused() && !g_IsPaused)
+		if (!IsTimerPaused() && !g_Match.ispaused)
 		{
 			PauseTF2Timer();
 			UpdateHudAll();
@@ -2363,20 +2368,20 @@ public Action Timer_StartMatch(Handle timer)
 	}
 	else
 	{
-		if (IsTimerPaused() && !g_IsPaused)
+		if (IsTimerPaused() && !g_Match.ispaused)
 		{
 			UnpauseTF2Timer();
 			UpdateHudAll();
 		}
 	}
 	
-	g_LobbyTime--;
+	g_Match.lobbytime--;
 
-	if (g_LobbyTime > 0)
+	if (g_Match.lobbytime > 0)
 		return Plugin_Continue;
 
-	g_LobbyTime = 0;
-	g_LobbyTimer = null;
+	g_Match.lobbytime = 0;
+	g_Match.lobbytimer = null;
 
 	StartMatch();
 
@@ -2511,7 +2516,7 @@ void TF2_CreateAnnotation(int client, float[3] origin, const char[] text, float 
 
 public Action Command_Pause(int client, int args)
 {
-	g_IsPaused = true;
+	g_Match.ispaused = true;
 	PauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has paused the timer.", client);
 	return Plugin_Handled;
@@ -2519,7 +2524,7 @@ public Action Command_Pause(int client, int args)
 
 public Action Command_Unpause(int client, int args)
 {
-	g_IsPaused = false;
+	g_Match.ispaused = false;
 	UnpauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has resumed the timer.", client);
 	return Plugin_Handled;
