@@ -1264,7 +1264,7 @@ public Action Timer_StartMatchCommand(Handle timer, any data)
 
 public void OnSetupStart(const char[] output, int caller, int activator, float delay)
 {
-
+	convar_AllTalk.BoolValue = true;
 }
 
 public void OnSetupFinished(const char[] output, int caller, int activator, float delay)
@@ -2276,8 +2276,6 @@ void TF2Attrib_RemoveMoveSpeedBonus(int client)
 
 void InitLobby()
 {
-	convar_AllTalk.BoolValue = true;
-
 	g_Match.matchstate = STATE_LOBBY;
 	CreateTeamTimer(60, 90, true);
 
