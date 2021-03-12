@@ -1950,26 +1950,8 @@ public MRESReturn OnMyWeaponFired(int client, Handle hReturn, Handle hParams)
 	if (client < 1 || client > MaxClients || !IsValidEntity(client) || !IsPlayerAlive(client))
 		return MRES_Ignored;
 	
-	//int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-
 	if (TF2_GetClientTeam(client) == TFTeam_Red)
 	{
-		/*int time = GetTime();
-
-		if (g_LastTime[client] < time)
-		{
-			g_LastTime[client] = time + 2;
-
-			for (int i = 1; i <= MaxClients; i++)
-			{
-				if (IsClientInGame(i) && IsPlayerAlive(i) && IsEntityInSightRange(client, i, 5.0, 0.0, true, false))
-				{
-					SDKHooks_TakeDamage(i, 0, client, 1000.0);
-					break;
-				}
-			}
-		}*/
-
 		g_Match.totalshots++;
 		SpeakResponseConcept(client, "TLK_FIREWEAPON");
 
@@ -2461,63 +2443,6 @@ public Action Command_Unpause(int client, int args)
 	UnpauseTF2Timer();
 	CPrintToChatAll("{azure}%N {honeydew}has resumed the timer.", client);
 	return Plugin_Handled;
-}
-
-stock bool IsEntityInSightRange(int client, int entity, float angle = 90.0, float distance = 0.0, bool heightcheck = true, bool negativeangle = false)
-{
-	if (angle > 360.0 || angle < 0.0)
-		angle = 180.0;
-	
-	float anglevector[3];
-	GetClientEyeAngles(client, anglevector);
-	
-	anglevector[0] = anglevector[2] = 0.0;
-	
-	GetAngleVectors(anglevector, anglevector, NULL_VECTOR, NULL_VECTOR);
-	NormalizeVector(anglevector, anglevector);
-	
-	if (negativeangle)
-		NegateVector(anglevector);
-	
-	float clientpos[3];
-	GetClientAbsOrigin(client, clientpos);
-	
-	float targetpos[3];
-	
-	if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
-		GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", targetpos);
-	else
-		GetClientAbsOrigin(entity, targetpos);
-	
-	float resultdistance;
-	if (heightcheck && distance > 0)
-		resultdistance = GetVectorDistance(clientpos, targetpos);
-	
-	clientpos[2] = targetpos[2] = 0.0;
-	
-	float targetvector[3];
-	MakeVectorFromPoints(clientpos, targetpos, targetvector);
-	NormalizeVector(targetvector, targetvector);
-	
-	float resultangle = RadToDeg(ArcCosine(GetVectorDotProduct(targetvector, anglevector)));
-	
-	if (resultangle <= angle / 2)	
-	{
-		if(distance > 0)
-		{
-			if (!heightcheck)
-				resultdistance = GetVectorDistance(clientpos, targetpos);
-			
-			if (distance >= resultdistance)
-				return true;
-			else
-				return false;
-		}
-		else
-			return true;
-	}
-	else
-		return false;
 }
 
 public Action Command_Tasks(int client, int args)
