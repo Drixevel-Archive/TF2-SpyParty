@@ -9,8 +9,8 @@
 #define PLUGIN_DESCRIPTION "An experimental gamemode where you have to assassinate spies attempting to complete objectives."
 #define PLUGIN_VERSION "1.0.0"
 
-#define STATE_HIBERNATION -1
-#define STATE_LOBBY 0
+#define STATE_HIBERNATION 0
+#define STATE_LOBBY 1
 #define STATE_PLAYING 2
 
 #define ACTION_GIVE 0
@@ -46,6 +46,7 @@ ConVar convar_AutoScramble;
 //Globals
 
 Database g_Database;
+bool g_Late;
 
 char sModels[10][PLATFORM_MAX_PATH] =
 {
@@ -197,6 +198,12 @@ public Plugin myinfo =
 	version = PLUGIN_VERSION, 
 	url = "https://drixevel.dev/"
 };
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	g_Late = late;
+	return APLRes_Success;
+}
 
 public void OnPluginStart()
 {
@@ -1255,6 +1262,16 @@ public Action Timer_StartMatchCommand(Handle timer, any data)
 	StartMatch();
 }
 
+public void OnSetupStart(const char[] output, int caller, int activator, float delay)
+{
+
+}
+
+public void OnSetupFinished(const char[] output, int caller, int activator, float delay)
+{
+	StartMatch();
+}
+
 void StartMatch()
 {
 	convar_AllTalk.BoolValue = false;
@@ -1654,6 +1671,14 @@ public void OnEntityCreated(int entity, const char[] classname)
 	
 	if (StrEqual(classname, "func_button", false))
 		SDKHook(entity, SDKHook_OnTakeDamage, OnButtonUse);
+	
+	if (StrEqual(classname, "team_round_timer", false))
+	{
+		SDKHook(entity, SDKHook_SpawnPost, OnTimerSpawnPost);
+
+		if (g_Late)
+			OnTimerSpawnPost(entity);
+	}
 }
 
 public Action OnButtonUse(int victim, int& attacker, int& inflictor, float& damage, int& damagetype)
@@ -2365,8 +2390,6 @@ public Action Timer_StartMatch(Handle timer)
 	g_Match.lobbytime = 0;
 	g_Match.lobbytimer = null;
 
-	StartMatch();
-
 	return Plugin_Stop;
 }
 
@@ -2817,4 +2840,10 @@ public Action Command_Spy(int client, int args)
 			CPrintToChat(client, "{azure}%N {honeydew}is currently a spy!", i);
 	
 	return Plugin_Handled;
+}
+
+public void OnTimerSpawnPost(int entity)
+{
+	HookSingleEntityOutput(entity, "OnSetupStart", OnSetupStart);
+	HookSingleEntityOutput(entity, "OnSetupFinished", OnSetupFinished);
 }
