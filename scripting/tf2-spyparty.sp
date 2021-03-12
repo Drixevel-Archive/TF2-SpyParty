@@ -1249,9 +1249,9 @@ public Action Command_Start(int client, int args)
 		if (IsClientInGame(i) && IsPlayerAlive(i))
 			count++;
 	
-	if (count < 2)
+	if (count < 3)
 	{
-		CPrintToChat(client, "You cannot manually start the match unless there's two available players.");
+		CPrintToChat(client, "You cannot manually start the match unless there's three available players.");
 		EmitGameSoundToClient(client, "Player.DenyWeaponSelection");
 		return Plugin_Handled;
 	}
