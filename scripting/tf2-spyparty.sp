@@ -123,9 +123,30 @@ enum struct Player
 		this.index = client;
 	}
 
+	int GetQueuePosition(int& total)
+	{
+		int position;
+				
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i) && GetClientTeam(i) > 1)
+			{
+				total++;
+				if (GetPoints(i) > this.queuepoints)
+					position++;
+			}
+		}
+
+		return position;
+	}
 }
 
 Player g_Player[MAXPLAYERS + 1];
+
+int GetPoints(int client)
+{
+	return g_Player[client].queuepoints;
+}
 
 enum struct Tasks
 {
@@ -195,6 +216,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_givetask", Command_GiveTask, ADMFLAG_ROOT, "Give yourself or others a task.");
 	RegAdminCmd("sm_spy", Command_Spy, ADMFLAG_ROOT, "Prints out who the spy is in chat.");
 
+	RegConsoleCmd("sm_queuepoints", Command_QueuePoints, "Shows you how many queue points you have.");
 	RegAdminCmd("sm_setqueuepoints", Command_SetQueuePoints, ADMFLAG_ROOT, "Set your own or somebody else's queue points.");
 
 	RegAdminCmd("sm_pause", Command_Pause, ADMFLAG_ROOT, "Pause the timer.");
@@ -2325,6 +2347,18 @@ public void TF2_OnWaitingForPlayersEnd()
 public Action Timer_Init(Handle timer)
 {
 	InitLobby();
+}
+
+public Action Command_QueuePoints(int client, int args)
+{
+	CPrintToChat(client, "You currently have {azure}%i {honeydew}queue points.", g_Player[client].queuepoints);
+
+	int total;
+	int position = g_Player[client].GetQueuePosition(total);
+
+	CPrintToChat(client, "You are currently {azure}%i/%i {honeydew}in line for assassin.", position, total);
+
+	return Plugin_Handled;
 }
 
 public Action Command_SetQueuePoints(int client, int args)
