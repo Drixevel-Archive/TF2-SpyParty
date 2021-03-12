@@ -126,7 +126,7 @@ enum struct Player
 	int GetQueuePosition(int& total)
 	{
 		int position;
-				
+
 		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && GetClientTeam(i) > 1)
@@ -485,10 +485,47 @@ bool CompleteTask(int client, int task)
 	if (!HasTask(client, task))
 		return false;
 	
-	int index =g_Player[client].requiredtasks.FindValue(task);
+	int index = g_Player[client].requiredtasks.FindValue(task);
 	g_Player[client].requiredtasks.Erase(index);
 
 	CPrintToChat(client, "You have completed the task: {azure}%s", g_Tasks[task].name);
+
+	if (StrEqual(g_Tasks[task].name, "Execute a Command", false))
+	{
+		EmitSoundToClient(client, "ambient/chamber_open.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Replace the Film", false))
+	{
+		EmitSoundToClient(client, "misc/freeze_cam_snapshot.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Water the Plants", false))
+	{
+		EmitSoundToClient(client, "weapons/jar_single.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Replace Hard Disk", false))
+	{
+		EmitSoundToClient(client, "ambient/chamber_open.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Plot World Domination", false))
+	{
+		EmitSoundToClient(client, "ui/duel_score_behind.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Play Pool", false))
+	{
+		EmitSoundToClient(client, "passtime/ball_catch.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Get Drunk", false))
+	{
+		EmitSoundToClient(client, "player/pl_scout_dodge_can_drink.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Make Coffee", false))
+	{
+		EmitSoundToClient(client, "player/pl_scout_dodge_can_drink.wav");
+	}
+	else if (StrEqual(g_Tasks[task].name, "Cook Food", false))
+	{
+		EmitSoundToClient(client, "npc/headcrab/headcrab_burning_loop2.wav");
+	}
 
 	EmitSoundToClient(client, "coach/coach_defend_here.wav");
 
@@ -614,6 +651,13 @@ public void OnMapStart()
 	PrecacheSound("coach/coach_defend_here.wav");
 	PrecacheSound("coach/coach_look_here.wav");
 	PrecacheSound("ambient/alarms/doomsday_lift_alarm.wav");
+	PrecacheSound("ambient/chamber_open.wav");
+	PrecacheSound("misc/freeze_cam_snapshot.wav");
+	PrecacheSound("weapons/jar_single.wav");
+	PrecacheSound("ui/duel_score_behind.wav");
+	PrecacheSound("passtime/ball_catch.wav");
+	PrecacheSound("player/pl_scout_dodge_can_drink.wav");
+	PrecacheSound("npc/headcrab/headcrab_burning_loop2.wav");
 
 	convar_RespawnWaveTime.IntValue = 10;
 }
