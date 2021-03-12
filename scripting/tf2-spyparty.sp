@@ -2499,11 +2499,6 @@ void SpawnNPC()
 	npc.flWalkSpeed = 300.0;
 	npc.flRunSpeed = 300.0;
 	npc.flDeathDropHeight = 2000.0;
-	
-	float vecMins[3] = {-1.0, -1.0, 0.0};
-	float vecMaxs[3] = {1.0, 1.0, 90.0};
-	npc.SetBodyMins(vecMins);
-	npc.SetBodyMaxs(vecMaxs);
 
 	npc.iHealth = 100;
 	npc.iMaxHealth = 100;
