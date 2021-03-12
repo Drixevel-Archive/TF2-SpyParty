@@ -1662,7 +1662,6 @@ public void OnEntityCreated(int entity, const char[] classname)
 	if (StrEqual(classname, "trigger_multiple", false))
 	{
 		SDKHook(entity, SDKHook_StartTouch, OnTouchTriggerStart);
-		SDKHook(entity, SDKHook_Touch, OnTouchTrigger);
 		SDKHook(entity, SDKHook_EndTouch, OnTouchTriggerEnd);
 	}
 
@@ -1788,20 +1787,6 @@ public Action OnTouchTriggerStart(int entity, int other)
 	
 	if (HasTask(other, task))
 		CPrintToChat(other, "You have this task, press {beige}MEDIC! {honeydew}to start this task.");
-}
-
-public Action OnTouchTrigger(int entity, int other)
-{
-	if (other < 1 || other > MaxClients)
-		return;
-	
-	char sName[64];
-	GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
-
-	if (StrEqual(sName, "", false))
-	{
-		
-	}
 }
 
 public Action OnTouchTriggerEnd(int entity, int other)
