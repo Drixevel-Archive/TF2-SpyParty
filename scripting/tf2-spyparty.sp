@@ -293,27 +293,30 @@ public void OnPluginStart()
 	Database.Connect(OnSQLConnect, "default");
 }
 
-public void OnSQLConnect(Database db, const char[] error, any data)
-{
-	if (db == null)
-		ThrowError("Error while connecting to database: %s", error);
-	
-	g_Database = db;
-	LogMessage("Connected to database successfully.");
-
-	char auth[64];
-	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientAuthorized(i) && GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth)))
-			OnClientAuthorized(i, auth);
-}
-
-public Action Command_Spy(int client, int args)
+public void OnPluginEnd()
 {
 	for (int i = 1; i <= MaxClients; i++)
-		if (IsClientInGame(i) && g_Player[i].isspy)
-			CPrintToChat(client, "{azure}%N {honeydew}is currently a spy!", i);
-	
-	return Plugin_Handled;
+	{
+		if (!IsClientInGame(i))
+			continue;
+		
+		if (!IsFakeClient(i))
+			ClearSyncHud(i, g_Match.hud);
+
+		if (IsPlayerAlive(i) && g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
+			RemoveEntity(g_Player[i].glowent);
+	}
+
+	int entity = -1;
+	while ((entity = FindEntityByClassname(entity, "base_boss")) != -1)
+		RemoveEntity(entity);
+
+	PauseTF2Timer();
+
+	convar_RespawnWaveTime.IntValue = 10;
+	convar_AutoTeamBalance.IntValue = 0;
+	convar_TeamBalanceLimit.IntValue = 0;
+	convar_AutoScramble.IntValue = 0;
 }
 
 public void OnConfigsExecuted()
@@ -328,6 +331,39 @@ public void OnConfigsExecuted()
 	convar_AutoScramble.IntValue = 0;
 
 	convar_AllTalk.BoolValue = true;
+}
+
+public void OnMapStart()
+{
+	g_GlowSprite = PrecacheModel("materials/sprites/blueglow2.vmt");
+	g_LaserSprite = PrecacheModel("materials/sprites/laserbeam.vmt");
+	g_HaloSprite = PrecacheModel("materials/sprites/halo01.vmt");
+
+	PrecacheSound("coach/coach_go_here.wav");
+	PrecacheSound("coach/coach_defend_here.wav");
+	PrecacheSound("coach/coach_look_here.wav");
+	PrecacheSound("ambient/alarms/doomsday_lift_alarm.wav");
+	PrecacheSound("ambient/chamber_open.wav");
+	PrecacheSound("misc/freeze_cam_snapshot.wav");
+	PrecacheSound("weapons/jar_single.wav");
+	PrecacheSound("ui/duel_score_behind.wav");
+	PrecacheSound("passtime/ball_catch.wav");
+	PrecacheSound("player/pl_scout_dodge_can_drink.wav");
+	PrecacheSound("npc/headcrab/headcrab_burning_loop2.wav");
+
+	convar_RespawnWaveTime.IntValue = 10;
+}
+
+public void OnMapEnd()
+{
+	g_Match.matchstate = STATE_HIBERNATION;
+
+	g_Match.lobbytimer = null;
+	g_Match.givetaskstimer = null;
+	g_Match.startmatchcommand = null;
+	g_Match.unlocksnipers = null;
+
+	convar_RespawnWaveTime.IntValue = 10;
 }
 
 public void OnClientConnected(int client)
@@ -623,61 +659,6 @@ public int MenuHandler_Tasks(Menu menu, MenuAction action, int param1, int param
 		case MenuAction_End:
 			delete menu;
 	}
-}
-
-public void OnPluginEnd()
-{
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i))
-			continue;
-		
-		if (!IsFakeClient(i))
-			ClearSyncHud(i, g_Match.hud);
-
-		if (IsPlayerAlive(i) && g_Player[i].glowent > 0 && IsValidEntity(g_Player[i].glowent))
-			RemoveEntity(g_Player[i].glowent);
-	}
-
-	PauseTF2Timer();
-
-	convar_RespawnWaveTime.IntValue = 10;
-	convar_AutoTeamBalance.IntValue = 0;
-	convar_TeamBalanceLimit.IntValue = 0;
-	convar_AutoScramble.IntValue = 0;
-}
-
-public void OnMapStart()
-{
-	g_GlowSprite = PrecacheModel("materials/sprites/blueglow2.vmt");
-	g_LaserSprite = PrecacheModel("materials/sprites/laserbeam.vmt");
-	g_HaloSprite = PrecacheModel("materials/sprites/halo01.vmt");
-
-	PrecacheSound("coach/coach_go_here.wav");
-	PrecacheSound("coach/coach_defend_here.wav");
-	PrecacheSound("coach/coach_look_here.wav");
-	PrecacheSound("ambient/alarms/doomsday_lift_alarm.wav");
-	PrecacheSound("ambient/chamber_open.wav");
-	PrecacheSound("misc/freeze_cam_snapshot.wav");
-	PrecacheSound("weapons/jar_single.wav");
-	PrecacheSound("ui/duel_score_behind.wav");
-	PrecacheSound("passtime/ball_catch.wav");
-	PrecacheSound("player/pl_scout_dodge_can_drink.wav");
-	PrecacheSound("npc/headcrab/headcrab_burning_loop2.wav");
-
-	convar_RespawnWaveTime.IntValue = 10;
-}
-
-public void OnMapEnd()
-{
-	g_Match.matchstate = STATE_HIBERNATION;
-
-	g_Match.lobbytimer = null;
-	g_Match.givetaskstimer = null;
-	g_Match.startmatchcommand = null;
-	g_Match.unlocksnipers = null;
-
-	convar_RespawnWaveTime.IntValue = 10;
 }
 
 public void Event_OnPlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
@@ -2813,4 +2794,27 @@ public void Hook_NPCThink(int iEnt)
 				animationEntity.ResetSequence(sequence_ilde);
 		}
 	}
+}
+
+public void OnSQLConnect(Database db, const char[] error, any data)
+{
+	if (db == null)
+		ThrowError("Error while connecting to database: %s", error);
+	
+	g_Database = db;
+	LogMessage("Connected to database successfully.");
+
+	char auth[64];
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientAuthorized(i) && GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth)))
+			OnClientAuthorized(i, auth);
+}
+
+public Action Command_Spy(int client, int args)
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i) && g_Player[i].isspy)
+			CPrintToChat(client, "{azure}%N {honeydew}is currently a spy!", i);
+	
+	return Plugin_Handled;
 }
