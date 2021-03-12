@@ -2653,21 +2653,12 @@ void SpawnNPC()
 		SetEntPropFloat(npcEntity.iEnt, Prop_Data, "m_flCycle", 0.0);
 	}
 
-	CreateTimer(2.0, Timer_SendToTask, npcEntity.iEnt);
-}
-
-public Action Timer_SendToTask(Handle timer, any data)
-{
-	int entity = data;
-	CBaseNPC npc = TheNPCs.FindNPCByEntIndex(entity);
-
-	if (npc == INVALID_NPC)
-		return Plugin_Stop;
-
 	int task = GetRandomTask();
 
 	if (!IsValidEntity(task))
-		return Plugin_Stop;
+		return;
+	
+	g_NPCTask[npc.Index] = task;
 	
 	float fStart[3], fEnd[3], fMiddle[3];
 	GetAbsBoundingBox(task, fStart, fEnd);
@@ -2676,10 +2667,9 @@ public Action Timer_SendToTask(Handle timer, any data)
 	//fMiddle[2] += 10.0;
 	pPath[npc.Index].ComputeToPos(npc.GetBot(), fMiddle, 9999999999.0);
 	pPath[npc.Index].SetMinLookAheadDistance(300.0);
-	PrintToChatAll("Pathing %i to task %i.", entity, task);
+	PrintToChatAll("Pathing %i to task %i.", npcEntity.iEnt, task);
 
-	CreateTimer(20.0, Timer_DestroyNPC, entity);
-	return Plugin_Stop;
+	CreateTimer(20.0, Timer_DestroyNPC, npcEntity.iEnt);
 }
 
 void GetMiddleOfABox(const float vec1[3], const float vec2[3], float buffer[3])
@@ -2747,26 +2737,12 @@ public void Hook_NPCThink(int iEnt)
 		bot.GetPosition(vecNPCPos);
 		GetEntPropVector(iEnt, Prop_Data, "m_angAbsRotation", vecNPCAng);
 		
-		float flMaxDistance = 9999999999999999.0;
-		int iBestTarget = -1;
-		for (int i = 1; i <= MaxClients; i++)
-		{
-			if (IsClientInGame(i) && IsPlayerAlive(i))
-			{
-				float vecBuffer[3];
-				GetClientAbsOrigin(i, vecBuffer);
-				float flDistance = GetVectorDistance(vecBuffer, vecNPCPos);
-				if (flDistance < flMaxDistance)
-				{
-					flMaxDistance = flDistance;
-					iBestTarget = i;
-				}
-			}
-		}
-		
-		if (iBestTarget == -1) return;
-		GetClientAbsOrigin(iBestTarget, vecTargetPos);
-		
+		int task = g_NPCTask[npc.Index];
+
+		float fStart[3], fEnd[3];
+		GetAbsBoundingBox(task, fStart, fEnd);
+		GetMiddleOfABox(fStart, fEnd, vecTargetPos);
+				
 		CBaseCombatCharacter animationEntity = CBaseCombatCharacter(iEnt);
 		
 		if (GetVectorDistance(vecNPCPos, vecTargetPos) > 100.0)
@@ -2787,10 +2763,9 @@ public void Hook_NPCThink(int iEnt)
 
 		int iPitch = animationEntity.LookupPoseParameter("body_pitch");
 		int iYaw = animationEntity.LookupPoseParameter("body_yaw");
-		float vecDir[3], vecAng[3], vecNPCCenter[3], vecPlayerCenter[3];
+		float vecDir[3], vecAng[3], vecNPCCenter[3];
 		animationEntity.WorldSpaceCenter(vecNPCCenter);
-		CBaseAnimating(iBestTarget).WorldSpaceCenter(vecPlayerCenter);
-		SubtractVectors(vecNPCCenter, vecPlayerCenter, vecDir); 
+		SubtractVectors(vecNPCCenter, vecTargetPos, vecDir); 
 		NormalizeVector(vecDir, vecDir);
 		GetVectorAngles(vecDir, vecAng); 
 		
