@@ -26,6 +26,8 @@
 #include <tf2attributes>
 #include <misc-colors>
 #include <customkeyvalues>
+#include <cbasenpc>
+#include <cbasenpc/util>
 
 /*****************************/
 //ConVars
@@ -46,6 +48,20 @@ ConVar convar_AutoScramble;
 
 /*****************************/
 //Globals
+
+char sModels[10][PLATFORM_MAX_PATH] =
+{
+	"",
+	"models/player/scout.mdl",
+	"models/player/sniper.mdl",
+	"models/player/soldier.mdl",
+	"models/player/demo.mdl",
+	"models/player/medic.mdl",
+	"models/player/heavy.mdl",
+	"models/player/pyro.mdl",
+	"models/player/spy.mdl",
+	"models/player/engineer.mdl"
+};
 
 enum TF2Quality {
 	TF2Quality_Normal = 0, // 0
@@ -137,6 +153,8 @@ bool g_IsMarked[MAXPLAYERS + 1];
 Handle g_StartMatchCommand;
 bool g_IsPaused;
 
+PathFollower pPath[MAX_NPCS];
+
 /*****************************/
 //Plugin Info
 public Plugin myinfo = 
@@ -150,6 +168,7 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	if (TheNavMesh) { }
 	CSetPrefix("{darkblue}[{azure}SpyParty{darkblue}]{honeydew}");
 
 	convar_TeamBalance = CreateConVar("sm_spyparty_teambalance", "0.35", "How many more reds should there be for blues?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
@@ -230,6 +249,11 @@ public void OnPluginStart()
 	convar_AutoTeamBalance.IntValue = 0;
 	convar_TeamBalanceLimit.IntValue = 0;
 	convar_AutoScramble.IntValue = 0;
+
+	for (int i = 0; i < MAX_NPCS; i++)
+		pPath[i] = PathFollower(_, Path_FilterIgnoreActors, Path_FilterOnlyActors);
+	
+	RegAdminCmd("sm_spawnnpc", Command_SpawnNPC, ADMFLAG_ROOT, "Manually spawn an NPC.");
 }
 
 public Action Command_Spy(int client, int args)
@@ -2508,4 +2532,244 @@ public Action Command_Tasks(int client, int args)
 
 	ShowTasksPanel(client);
 	return Plugin_Handled;
+}
+
+public Action Command_SpawnNPC(int client, int args)
+{
+	SpawnNPC();
+	return Plugin_Handled;
+}
+
+void SpawnNPC()
+{
+	int point = GetBotSpawnPoint();
+
+	if (point < 1)
+	{
+		PrintToChatAll("not found point");
+		return;
+	}
+
+	float vecOrigin[3];
+	GetEntPropVector(point, Prop_Send, "m_vecOrigin", vecOrigin);
+
+	CBaseNPC npc = new CBaseNPC();
+	
+	if (npc == INVALID_NPC)
+	{
+		PrintToChatAll("Failed to create npc!");
+		return;
+	}
+	
+	CBaseCombatCharacter npcEntity = CBaseCombatCharacter(npc.GetEntity());
+	npcEntity.Spawn();
+	npcEntity.Teleport(vecOrigin);
+	npcEntity.SetModel(sModels[GetRandomInt(1, 9)]);
+	
+	SDKHook(npcEntity.iEnt, SDKHook_Think, Hook_NPCThink);
+	
+	npc.flStepSize = 18.0;
+	npc.flGravity = 800.0;
+	npc.flAcceleration = 4000.0;
+	npc.flJumpHeight = 85.0;
+	npc.flWalkSpeed = 300.0;
+	npc.flRunSpeed = 300.0;
+	npc.flDeathDropHeight = 2000.0;
+	
+	float vecMins[3] = {-1.0, -1.0, 0.0};
+	float vecMaxs[3] = {1.0, 1.0, 90.0};
+	npc.SetBodyMins(vecMins);
+	npc.SetBodyMaxs(vecMaxs);
+	
+	int iSequence = npcEntity.SelectWeightedSequence(ACT_MP_STAND_MELEE);
+	if (iSequence != -1)
+	{
+		npcEntity.ResetSequence(iSequence);
+		SetEntPropFloat(npcEntity.iEnt, Prop_Data, "m_flCycle", 0.0);
+	}
+
+	CreateTimer(2.0, Timer_SendToTask, npcEntity.iEnt);
+}
+
+public Action Timer_SendToTask(Handle timer, any data)
+{
+	int entity = data;
+	CBaseNPC npc = TheNPCs.FindNPCByEntIndex(entity);
+
+	if (npc == INVALID_NPC)
+		return Plugin_Stop;
+
+	int task = GetRandomTask();
+
+	if (!IsValidEntity(task))
+		return Plugin_Stop;
+	
+	float fStart[3], fEnd[3], fMiddle[3];
+	GetAbsBoundingBox(task, fStart, fEnd);
+	GetMiddleOfABox(fStart, fEnd, fMiddle);
+
+	//fMiddle[2] += 10.0;
+	pPath[npc.Index].ComputeToPos(npc.GetBot(), fMiddle, 9999999999.0);
+	pPath[npc.Index].SetMinLookAheadDistance(300.0);
+	PrintToChatAll("Pathing %i to task %i.", entity, task);
+
+	CreateTimer(20.0, Timer_DestroyNPC, entity);
+	return Plugin_Stop;
+}
+
+void GetMiddleOfABox(const float vec1[3], const float vec2[3], float buffer[3])
+{
+	float mid[3];
+	MakeVectorFromPoints(vec1, vec2, mid);
+
+	mid[0] /= 2.0;
+	mid[1] /= 2.0;
+	mid[2] /= 2.0;
+
+	AddVectors(vec1, mid, buffer);
+}
+
+public Action Timer_DestroyNPC(Handle timer, any data)
+{
+	int entity = data;
+	AcceptEntityInput(entity, "Kill");
+}
+
+int GetRandomTask()
+{
+	int[] tasks = new int[g_TotalTasks];
+	int total;
+
+	int entity = -1; char sName[64];
+	while ((entity = FindEntityByClassname(entity, "trigger_multiple")) != -1)
+	{
+		GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+		if (StrContains(sName, "task_", false) == 0)
+			tasks[total++] = entity;
+	}
+
+	return tasks[GetRandomInt(0, total - 1)];
+}
+
+int GetBotSpawnPoint()
+{
+	int points[3];
+	int total;
+
+	int entity = -1; char sName[64];
+	while ((entity = FindEntityByClassname(entity, "info_target")) != -1)
+	{
+		GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+
+		if (StrEqual(sName, "bot_spawn_point", false))
+			points[total++] = entity;
+	}
+
+	return points[GetRandomInt(0, total - 1)];
+}
+
+public void Hook_NPCThink(int iEnt)
+{
+	CBaseNPC npc = TheNPCs.FindNPCByEntIndex(iEnt);
+		
+	if (npc != INVALID_NPC)
+	{
+		float vecNPCPos[3], vecNPCAng[3], vecTargetPos[3];
+		INextBot bot = npc.GetBot();
+		NextBotGroundLocomotion loco = npc.GetLocomotion();
+		
+		bot.GetPosition(vecNPCPos);
+		GetEntPropVector(iEnt, Prop_Data, "m_angAbsRotation", vecNPCAng);
+		
+		float flMaxDistance = 9999999999999999.0;
+		int iBestTarget = -1;
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i) && IsPlayerAlive(i))
+			{
+				float vecBuffer[3];
+				GetClientAbsOrigin(i, vecBuffer);
+				float flDistance = GetVectorDistance(vecBuffer, vecNPCPos);
+				if (flDistance < flMaxDistance)
+				{
+					flMaxDistance = flDistance;
+					iBestTarget = i;
+				}
+			}
+		}
+		
+		if (iBestTarget == -1) return;
+		GetClientAbsOrigin(iBestTarget, vecTargetPos);
+		
+		CBaseCombatCharacter animationEntity = CBaseCombatCharacter(iEnt);
+		
+		if (GetVectorDistance(vecNPCPos, vecTargetPos) > 100.0)
+			pPath[npc.Index].Update(bot);
+		
+		loco.Run();
+		
+		int iSequence = GetEntProp(iEnt, Prop_Send, "m_nSequence");
+		
+		static int sequence_ilde = -1;
+		if (sequence_ilde == -1) sequence_ilde = animationEntity.SelectWeightedSequence(ACT_MP_STAND_MELEE);
+		
+		static int sequence_air_walk = -1;
+		if (sequence_air_walk == -1) sequence_air_walk = animationEntity.SelectWeightedSequence(ACT_MP_JUMP_FLOAT_MELEE);
+		
+		static int sequence_run = -1;
+		if (sequence_run == -1) sequence_run = animationEntity.SelectWeightedSequence(ACT_MP_RUN_MELEE);
+
+		int iPitch = animationEntity.LookupPoseParameter("body_pitch");
+		int iYaw = animationEntity.LookupPoseParameter("body_yaw");
+		float vecDir[3], vecAng[3], vecNPCCenter[3], vecPlayerCenter[3];
+		animationEntity.WorldSpaceCenter(vecNPCCenter);
+		CBaseAnimating(iBestTarget).WorldSpaceCenter(vecPlayerCenter);
+		SubtractVectors(vecNPCCenter, vecPlayerCenter, vecDir); 
+		NormalizeVector(vecDir, vecDir);
+		GetVectorAngles(vecDir, vecAng); 
+		
+		float flPitch = animationEntity.GetPoseParameter(iPitch);
+		float flYaw = animationEntity.GetPoseParameter(iYaw);
+		
+		vecAng[0] = UTIL_Clamp(UTIL_AngleNormalize(vecAng[0]), -44.0, 89.0);
+		animationEntity.SetPoseParameter(iPitch, UTIL_ApproachAngle(vecAng[0], flPitch, 1.0));
+		vecAng[1] = UTIL_Clamp(-UTIL_AngleNormalize(UTIL_AngleDiff(UTIL_AngleNormalize(vecAng[1]), UTIL_AngleNormalize(vecNPCAng[1]+180.0))), -44.0,  44.0);
+		animationEntity.SetPoseParameter(iYaw, UTIL_ApproachAngle(vecAng[1], flYaw, 1.0));
+		
+		int iMoveX = animationEntity.LookupPoseParameter("move_x");
+		int iMoveY = animationEntity.LookupPoseParameter("move_y");
+		
+		if ( iMoveX < 0 || iMoveY < 0 )
+			return;
+		
+		float flGroundSpeed = loco.GetGroundSpeed();
+		if ( flGroundSpeed != 0.0 )
+		{
+			if (!(GetEntityFlags(iEnt) & FL_ONGROUND))
+			{
+				if (iSequence != sequence_air_walk)
+					animationEntity.ResetSequence(sequence_air_walk);
+			}
+			else
+			{			
+				if (iSequence != sequence_run)
+					animationEntity.ResetSequence(sequence_run);
+			}
+			
+			float vecForward[3], vecRight[3], vecUp[3], vecMotion[3];
+			animationEntity.GetVectors(vecForward, vecRight, vecUp);
+			loco.GetGroundMotionVector(vecMotion);
+			float newMoveX = (vecForward[1] * vecMotion[1]) + (vecForward[0] * vecMotion[0]) +  (vecForward[2] * vecMotion[2]);
+			float newMoveY = (vecRight[1] * vecMotion[1]) + (vecRight[0] * vecMotion[0]) + (vecRight[2] * vecMotion[2]);
+			
+			animationEntity.SetPoseParameter(iMoveX, newMoveX);
+			animationEntity.SetPoseParameter(iMoveY, newMoveY);
+		}
+		else
+		{
+			if (iSequence != sequence_ilde)
+				animationEntity.ResetSequence(sequence_ilde);
+		}
+	}
 }
